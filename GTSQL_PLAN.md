@@ -29,7 +29,7 @@ There are exactly **6 top-level clauses**. All other operations are subclauses n
 | `TABULATE` | Entry point, data source, column selection | `FROM` |
 | `FORMAT` | Per-column formatting, structure (span/stub) | `SETTING`, `RENAMING` |
 | `FACET` | Summary aggregation | `SUMMARIZE` |
-| `SCALE` | Continuous aesthetic mapping (color, size) | `SETTING`, `FILTER` |
+| `SCALE` | Continuous aesthetic mapping (color, size, opacity) | `SETTING`, `FILTER` |
 | `HIGHLIGHT` | Conditional cell styling | `FILTER`, `SETTING` |
 | `LABEL` | Text labels (title, subtitle, caption, column labels) | — |
 
@@ -377,6 +377,7 @@ SCALE <aesthetic> [FROM (<min>, <max>)] TO (<val1>, <val2>) [VIA <transform>]
   - `background` — cell background color
   - `foreground` — text color
   - `size` — font size
+  - `opacity` — cell/text transparency (0–1 range; maps to alpha channel)
 - `FROM (<min>, <max>)` — the data domain (numeric range); **optional** — if omitted, the domain is inferred from the column’s actual data range (matching ggsql’s existing `SCALE` behavior and gt’s `domain = NULL` default)
 - `TO (<val1>, <val2>)` — the output range (colors for `background`/`foreground`; sizes for `size`)
 - `VIA <transform>` — optional transform: `log10`, `sqrt`, `reverse`, etc.
@@ -406,6 +407,10 @@ SCALE foreground FROM (0, 1) TO ('black', 'red')
 SCALE background FROM (1000, 100000) TO ('white', 'darkgreen')
   SETTING target => revenue
   FILTER revenue > 1000 AND region IN ('North', 'South')
+
+-- Opacity scale: fade less important rows
+SCALE opacity FROM (0, 100) TO (0.3, 1.0)
+  SETTING target => relevance_score
 ```
 
 **gt mapping:**
@@ -413,6 +418,7 @@ SCALE background FROM (1000, 100000) TO ('white', 'darkgreen')
 - `background`/`foreground` without `FROM` → `data_color(columns = ..., palette = c(...), domain = NULL)`
 - With `FILTER` → adds `rows = <condition>` to `data_color()` or `cells_body(rows = ...)`
 - `size` → `tab_style(style = cell_text(size = px(...)), locations = cells_body(...))` applied per-cell based on interpolated value
+- `opacity` → `tab_style(style = cell_fill(alpha = ...), locations = cells_body(...))` / `cell_text(color = rgba(...))` per-cell based on interpolated value
 
 ---
 
