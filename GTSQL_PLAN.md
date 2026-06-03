@@ -488,9 +488,14 @@ HIGHLIGHT score
 HIGHLIGHT grade
   FILTER grade = 'A'
   SETTING background => '#e6ffe6'
+
+-- Multiple columns with the same filter and style
+HIGHLIGHT revenue, units, margin
+  FILTER region = 'West'
+  SETTING background => '#fff3cd'
 ```
 
-**gt mapping:** `tab_style(style = cell_text(weight = "bold", color = "red"), locations = cells_body(columns = score, rows = score < 60))`
+**gt mapping:** `tab_style(style = cell_text(weight = "bold", color = "red"), locations = cells_body(columns = score, rows = score < 60))`, `tab_style(style = cell_fill(color = "#fff3cd"), locations = cells_body(columns = c(revenue, units, margin), rows = region == "West"))`
 
 ---
 
@@ -667,6 +672,7 @@ Answer: Yes. Global locale is set via `TABULATE ... SETTING locale => '...'` and
 7. **SCALE palette**: Should `SCALE` support named palettes (e.g., `TO viridis`) in addition to explicit color pairs? (Proposed: yes, in a later phase.)
 Answer: Yes, from the start. ggsql VISUALISE already supports `TO <palette_name>` — TABULATE reuses the same syntax and palette catalogue (Crameri, ColorBrewer, Matplotlib, etc.).
 8. **HIGHLIGHT multiple columns**: Can `HIGHLIGHT` target different columns with the same filter? (Proposed: yes — list columns after `HIGHLIGHT`.)
+Answer: Yes. Multiple columns listed after `HIGHLIGHT` all receive the same style when the filter matches. This maps to `cells_body(columns = c(...), rows = ...)`.
 9. **FORMAT SPAN nesting**: Can spanners be nested (multi-level)? (Proposed: yes — multiple `FORMAT SPAN` clauses with `level => <n>` parameter in `SETTING`.)
 
 ---
