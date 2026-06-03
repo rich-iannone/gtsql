@@ -29,7 +29,7 @@ There are exactly **6 top-level clauses**. All other operations are subclauses n
 | `TABULATE` | Entry point, data source, column selection | `FROM` |
 | `FORMAT` | Per-column formatting, structure (span/stub) | `SETTING`, `RENAMING` |
 | `FACET` | Summary aggregation | `SUMMARIZE` |
-| `SCALE` | Continuous color mapping | `SETTING` |
+| `SCALE` | Continuous aesthetic mapping (color, size) | `SETTING` |
 | `HIGHLIGHT` | Conditional cell styling | `FILTER`, `SETTING` |
 | `LABEL` | Text labels (title, subtitle, caption, column labels) | — |
 
@@ -288,33 +288,43 @@ FACET open, high, low, close
 
 ---
 
-### 4. `SCALE` — Continuous Color Mapping (maps to `data_color()`)
+### 4. `SCALE` — Continuous Aesthetic Mapping (maps to `data_color()`, `tab_style()`)
 
-The `SCALE` clause maps a continuous data range to a color palette, applying it as a background or foreground color. This parallels ggsql's `SCALE` clause in `VISUALISE` which controls aesthetic mappings.
+The `SCALE` clause maps a continuous data range to a visual property range, applying it per-cell. This parallels ggsql's `SCALE` clause in `VISUALISE` which controls aesthetic mappings.
 
 **Syntax:**
 ```sql
-SCALE <aesthetic> FROM (<min>, <max>) TO (<color1>, <color2>) [VIA <transform>]
+SCALE <aesthetic> FROM (<min>, <max>) TO (<val1>, <val2>) [VIA <transform>]
   SETTING target => <column>
 ```
 
 **Components:**
-- `<aesthetic>` — the visual property: `background` or `foreground`
+- `<aesthetic>` — the visual property to scale:
+  - `background` — cell background color
+  - `foreground` — text color
+  - `size` — font size
 - `FROM (<min>, <max>)` — the data domain (numeric range)
-- `TO (<color1>, <color2>)` — the color range (CSS colors, hex, or named)
+- `TO (<val1>, <val2>)` — the output range (colors for `background`/`foreground`; sizes for `size`)
 - `VIA <transform>` — optional transform: `log10`, `sqrt`, `reverse`, etc.
-- `SETTING target => <column>` — which column to apply the color scale to
+- `SETTING target => <column>` — which column to apply the scale to
 
-**Example:**
+**Examples:**
 ```sql
+-- Color scale on background
 TABULATE country, population, gdp_per_capita FROM world_data
 SCALE background FROM (0, 100000) TO ('white', 'darkgreen') VIA log10
   SETTING target => gdp_per_capita
 SCALE background FROM (0, 1500000000) TO ('#f7fbff', '#08306b')
   SETTING target => population
+
+-- Font size scale
+SCALE size FROM (0, 1000000) TO ('12px', '28px')
+  SETTING target => population
 ```
 
-**gt mapping:** `data_color(columns = gdp_per_capita, palette = c("white", "darkgreen"), domain = c(0, 100000), fn = scales::col_numeric(...))`
+**gt mapping:**
+- `background`/`foreground` → `data_color(columns = ..., palette = c(...), domain = c(...))`
+- `size` → `tab_style(style = cell_text(size = px(...)), locations = cells_body(...))` applied per-cell based on interpolated value
 
 ---
 
@@ -472,8 +482,9 @@ LABEL
 | `cols_hide()` | `FORMAT ... SETTING hide => true` | `FORMAT` |
 | `cols_units()` | `FORMAT ... SETTING units => '...'` | `FORMAT` |
 | `summary_rows()` | `FACET ... SUMMARIZE` | `FACET` |
-| `data_color()` | `SCALE <aesthetic> FROM ... TO ...` | `SCALE` |
-| `tab_style()` | `HIGHLIGHT ... FILTER ... SETTING` | `HIGHLIGHT` |
+| `data_color()` | `SCALE background/foreground FROM ... TO ...` | `SCALE` |
+| `tab_style()` (size) | `SCALE size FROM ... TO ...` | `SCALE` |
+| `tab_style()` (conditional) | `HIGHLIGHT ... FILTER ... SETTING` | `HIGHLIGHT` |
 
 ---
 
