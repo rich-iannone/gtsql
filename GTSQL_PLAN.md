@@ -244,6 +244,63 @@ FORMAT species
 
 ---
 
+#### 2.3 `FORMAT` — Consolidated Examples
+
+Below are representative examples showing the range of `FORMAT` usage patterns.
+
+**Example 1: Designate a stub and label it**
+```sql
+-- The 'country' column becomes the row label; AS provides stubhead text
+FORMAT STUB country AS 'Country'
+```
+
+**Example 2: Group columns under a spanner**
+```sql
+-- Two spanners grouping related columns
+FORMAT SPAN pop_2016, pop_2021 AS 'Population'
+FORMAT SPAN density_2016, density_2021 AS 'Density'
+```
+
+**Example 3: Numeric formatting with display properties**
+```sql
+-- Format as currency, right-align, and set width
+FORMAT revenue
+  SETTING width => '140px', align => 'right'
+  RENAMING * => '${:num ,.2f}'
+```
+
+**Example 4: Date formatting with column rename**
+```sql
+-- Render dates in long form; AS renames the column header
+FORMAT order_date AS 'Order Date'
+  RENAMING * => '{:time %B %d, %Y}'
+```
+
+**Example 5: Handle missing and zero values**
+```sql
+-- Replace nulls with em-dash globally, zeros with em-dash in 'count'
+FORMAT *
+  RENAMING null => '—'
+FORMAT count
+  RENAMING 0 => '—'
+```
+
+**Example 6: Direct value mapping (text transform)**
+```sql
+-- Map coded values to display labels
+FORMAT status
+  RENAMING 'A' => '✅ Active', 'I' => '❌ Inactive', 'P' => '⏸️ Paused'
+```
+
+**Example 7: Hide a column used only for SCALE targeting**
+```sql
+-- Keep 'score_raw' in the dataset for SCALE but hide from display
+FORMAT score_raw
+  SETTING hide => true
+```
+
+---
+
 ### 3. `FACET` — Summary Aggregation (maps to `summary_rows()`)
 
 The `FACET` clause adds summary/aggregation rows to the table, paralleling ggsql's existing `FACET` clause in `VISUALISE`. In the table context, it targets specific columns for aggregation.
@@ -275,16 +332,30 @@ FACET <column>, ...
 - `label => 'string'` or `['label1', 'label2', ...]` — label(s) for the summary row(s)
 - `missing_text => 'string'` — text for non-aggregable cells
 
-**Example:**
+**Examples:**
 ```sql
+-- Minimal: single summary function with default placement (bottom)
+TABULATE product, revenue, units FROM quarterly_sales
+FACET revenue, units
+  SUMMARIZE 'sum'
+
+-- Multiple functions with custom labels
 TABULATE date, open, high, low, close FROM sp500
 FORMAT STUB date
 FACET open, high, low, close
   SUMMARIZE 'min', 'max', 'mean',
             side => 'bottom', label => ['Min', 'Max', 'Avg']
+
+-- Summary at the top, targeting specific row groups
+TABULATE region, quarter, revenue FROM sales
+FORMAT STUB region
+FACET revenue
+  SUMMARIZE 'mean',
+            side => 'top', groups => ['North', 'South'],
+            label => 'Avg', missing_text => '—'
 ```
 
-**gt mapping:** `summary_rows(fns = list("min", "max", list(label = "Avg", fn = "mean")))`
+**gt mapping:** `summary_rows(columns = c(revenue, units), fns = list("sum"))`, `summary_rows(fns = list("min", "max", list(label = "Avg", fn = "mean")))`, `summary_rows(groups = c("North", "South"), side = "top", ...)`
 
 ---
 
