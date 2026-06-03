@@ -478,7 +478,13 @@ LABEL
 - `caption => 'string'` — caption for cross-referencing
 - `<column> => 'string'` — column display label (maps to `cols_label()`)
 
-Reserved keys (`title`, `subtitle`, `caption`) are table-level; any other key is treated as a column name.
+Reserved keys (`title`, `subtitle`, `caption`) are recognized only when **unquoted**. To label a column whose name collides with a reserved key, quote it:
+
+```sql
+LABEL
+  title => 'My Report',          -- sets the table title (reserved, unquoted)
+  'title' => 'Article Title'     -- labels a column named "title" (quoted identifier)
+```
 
 **Example:**
 ```sql
@@ -486,12 +492,14 @@ TABULATE * FROM sales
 LABEL
   title => 'Quarterly Sales Report',
   subtitle => 'FY 2024 Q1-Q4',
+  caption => 'Source: internal CRM data',
   revenue => 'Revenue ($)',
   units => 'Units Sold',
-  satisfaction => 'CSAT Score'
+  satisfaction => 'CSAT Score',
+  'title' => 'Deal Name'
 ```
 
-**gt mapping:** `tab_header(title = ..., subtitle = ...)`, `tab_caption(caption = ...)`, `cols_label(revenue = "Revenue ($)", units = "Units Sold", ...)`
+**gt mapping:** `tab_header(title = ..., subtitle = ...)`, `tab_caption(caption = ...)`, `cols_label(revenue = "Revenue ($)", units = "Units Sold", satisfaction = "CSAT Score", title = "Deal Name")`
 
 ---
 
