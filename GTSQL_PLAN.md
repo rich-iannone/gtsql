@@ -29,7 +29,7 @@ There are exactly **6 top-level clauses**. All other operations are subclauses n
 | `TABULATE` | Entry point, data source, column selection | `FROM` |
 | `FORMAT` | Per-column formatting, structure (span/stub) | `SETTING`, `RENAMING` |
 | `FACET` | Summary aggregation | `SUMMARIZE` |
-| `SCALE` | Continuous aesthetic mapping (color, size) | `SETTING` |
+| `SCALE` | Continuous aesthetic mapping (color, size) | `SETTING`, `FILTER` |
 | `HIGHLIGHT` | Conditional cell styling | `FILTER`, `SETTING` |
 | `LABEL` | Text labels (title, subtitle, caption, column labels) | — |
 
@@ -56,6 +56,8 @@ FACET <column>, ...
 -- Styling based on numerical data (can appear multiple times)
 SCALE background FROM (0, 10) TO ('white', 'red') VIA log10
   SETTING target => col1
+SCALE background TO ('#eee', '#d00')  -- auto domain from data
+  SETTING target => col2
 
 -- Arbitrary styling (can appear multiple times)
 HIGHLIGHT <column>, ...
@@ -365,8 +367,9 @@ The `SCALE` clause maps a continuous data range to a visual property range, appl
 
 **Syntax:**
 ```sql
-SCALE <aesthetic> FROM (<min>, <max>) TO (<val1>, <val2>) [VIA <transform>]
+SCALE <aesthetic> [FROM (<min>, <max>)] TO (<val1>, <val2>) [VIA <transform>]
   SETTING target => <column>
+  FILTER <condition>
 ```
 
 **Components:**
@@ -374,27 +377,41 @@ SCALE <aesthetic> FROM (<min>, <max>) TO (<val1>, <val2>) [VIA <transform>]
   - `background` — cell background color
   - `foreground` — text color
   - `size` — font size
-- `FROM (<min>, <max>)` — the data domain (numeric range)
+- `FROM (<min>, <max>)` — the data domain (numeric range); **optional** — if omitted, the domain is inferred from the column’s actual data range (matching ggsql’s existing `SCALE` behavior and gt’s `domain = NULL` default)
 - `TO (<val1>, <val2>)` — the output range (colors for `background`/`foreground`; sizes for `size`)
 - `VIA <transform>` — optional transform: `log10`, `sqrt`, `reverse`, etc.
-- `SETTING target => <column>` — which column to apply the scale to
+- `SETTING target => <column>` — which column to apply the scale to (**required**). In `VISUALISE`, the aesthetic target is implicit via `DRAW ... col AS fill`; in `TABULATE` there is no aesthetic binding syntax, so `target` explicitly names the column whose values drive the scale and receive the styled output
+- `FILTER <condition>` — **optional** row selection; only rows matching the condition receive the scaled styling (maps to gt’s `data_color(rows = ...)` / `tab_style(locations = cells_body(rows = ...))`) . Uses the same SQL-like expressions as `HIGHLIGHT ... FILTER`
 
 **Examples:**
 ```sql
--- Color scale on background
+-- Color scale with explicit domain
 TABULATE country, population, gdp_per_capita FROM world_data
 SCALE background FROM (0, 100000) TO ('white', 'darkgreen') VIA log10
   SETTING target => gdp_per_capita
-SCALE background FROM (0, 1500000000) TO ('#f7fbff', '#08306b')
+
+-- Auto domain (inferred from data) — equivalent to data_color(domain = NULL)
+SCALE background TO ('#f7fbff', '#08306b')
   SETTING target => population
 
--- Font size scale
-SCALE size FROM (0, 1000000) TO ('12px', '28px')
+-- Font size scale with auto domain
+SCALE size TO ('12px', '28px')
   SETTING target => population
+
+-- Foreground color with explicit domain
+SCALE foreground FROM (0, 1) TO ('black', 'red')
+  SETTING target => error_rate
+
+-- Row-filtered scale: only color rows matching compound condition
+SCALE background FROM (1000, 100000) TO ('white', 'darkgreen')
+  SETTING target => revenue
+  FILTER revenue > 1000 AND region IN ('North', 'South')
 ```
 
 **gt mapping:**
-- `background`/`foreground` → `data_color(columns = ..., palette = c(...), domain = c(...))`
+- `background`/`foreground` with `FROM` → `data_color(columns = ..., palette = c(...), domain = c(...))`
+- `background`/`foreground` without `FROM` → `data_color(columns = ..., palette = c(...), domain = NULL)`
+- With `FILTER` → adds `rows = <condition>` to `data_color()` or `cells_body(rows = ...)`
 - `size` → `tab_style(style = cell_text(size = px(...)), locations = cells_body(...))` applied per-cell based on interpolated value
 
 ---
