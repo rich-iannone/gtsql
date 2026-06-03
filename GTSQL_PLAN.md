@@ -26,7 +26,7 @@ There are exactly **6 top-level clauses**. All other operations are subclauses n
 
 | Top-Level Clause | Purpose | Subclauses |
 |---|---|---|
-| `TABULATE` | Entry point, data source, column selection | `FROM` |
+| `TABULATE` | Entry point, data source, column selection | `FROM`, `SETTING` |
 | `FORMAT` | Per-column formatting, structure (span/stub) | `SETTING`, `RENAMING` |
 | `FACET` | Summary aggregation | `SUMMARIZE` |
 | `SCALE` | Continuous aesthetic mapping (color, size, opacity) | `SETTING`, `FILTER` |
@@ -43,6 +43,7 @@ SELECT columns FROM table WHERE conditions
 
 -- Entry point (required)
 TABULATE <column>, ... FROM <data-source>
+  SETTING locale => 'string'  -- optional global locale
 
 -- Formatting operations (can appear multiple times)
 FORMAT <SPAN|STUB> <column>, ... AS span1
@@ -85,6 +86,7 @@ The `TABULATE` clause marks the transition from SQL to table declaration, analog
 **Syntax:**
 ```sql
 TABULATE <column>, ... FROM <data-source>
+  SETTING <param> => <value>, ...
 ```
 
 **Behavior:**
@@ -93,6 +95,9 @@ TABULATE <column>, ... FROM <data-source>
 - If a preceding `SELECT` provides data, `FROM` is optional
 - Column order in `TABULATE` determines display order
 - `AS` renames a column for display (maps to `cols_label()`)
+
+**Settings:**
+- `locale => 'string'` — global locale for the table (e.g., `'de'`, `'fr-FR'`, `'pt-BR'`); propagates to all `FORMAT ... RENAMING` clauses unless overridden per-column (maps to gt's `locale` parameter in `fmt_*()` functions)
 
 **Examples:**
 ```sql
@@ -109,9 +114,13 @@ WITH monthly AS (
   SELECT month, SUM(revenue) as total FROM sales GROUP BY month
 )
 TABULATE * FROM monthly
+
+-- Set a global locale (all FORMAT RENAMING inherits German formatting)
+TABULATE * FROM sales
+  SETTING locale => 'de'
 ```
 
-**gt mapping:** `gt(data, ...)` with column selection/ordering handled by the engine.
+**gt mapping:** `gt(data, locale = "de")` with column selection/ordering handled by the engine.
 
 ---
 
@@ -142,6 +151,7 @@ The `SETTING` subclause on `FORMAT` controls display properties:
 - `align => 'string'` — alignment: `'left'`, `'center'`, `'right'`, `'auto'` (maps to `cols_align()`)
 - `hide => true/false` — hide column from display (maps to `cols_hide()`)
 - `units => 'string'` — units notation (maps to `cols_units()`)
+- `locale => 'string'` — per-column locale override (e.g., `'fr'`, `'ja'`); takes precedence over the global locale set in `TABULATE SETTING` (maps to `locale` param in `fmt_*()` calls for this column)
 
 **Example:**
 ```sql
@@ -159,9 +169,14 @@ FORMAT area
   SETTING align => 'right'
 FORMAT internal_id
   SETTING hide => true
+
+-- Override locale for a specific column (French dates in a German table)
+FORMAT order_date
+  SETTING locale => 'fr'
+  RENAMING * => '{:time %d %B %Y}'
 ```
 
-**gt mapping:** `gt(rowname_col = "model")`, `tab_spanner(label = "Population", columns = c(pop_2016, pop_2021))`, `cols_width(population ~ px(150))`, `cols_align(align = "right", columns = population)`, `cols_hide(columns = internal_id)`
+**gt mapping:** `gt(rowname_col = "model")`, `tab_spanner(label = "Population", columns = c(pop_2016, pop_2021))`, `cols_width(population ~ px(150))`, `cols_align(align = "right", columns = population)`, `cols_hide(columns = internal_id)`, `fmt_date(columns = order_date, locale = "fr")`
 
 ---
 
@@ -299,6 +314,15 @@ FORMAT status
 -- Keep 'score_raw' in the dataset for SCALE but hide from display
 FORMAT score_raw
   SETTING hide => true
+```
+
+**Example 8: Per-column locale override**
+```sql
+-- Global locale is German (set in TABULATE SETTING locale => 'de'),
+-- but this column uses Brazilian Portuguese formatting
+FORMAT preco
+  SETTING locale => 'pt-BR'
+  RENAMING * => '{:num ,.2f}'
 ```
 
 ---
@@ -618,11 +642,17 @@ LABEL
 ## Open Questions
 
 1. **Keyword choice**: `TABULATE` vs `TABLE` vs `PRESENT`? (`TABULATE` avoids conflict with SQL `TABLE` keyword and is more distinctive.)
+Answer: TABULATE is okay.
 2. **Interplay with VISUALISE**: Can a query have both `VISUALISE` and `TABULATE`? Likely no — they are mutually exclusive output modes.
+Answer: we haven't thought about what the host application will do. I assume it should be fine.
 3. **Column aliasing**: Should `AS` in `TABULATE` set both the source mapping and the display label, or only the label? (Proposed: sets the display label, i.e., maps to `cols_label()`.)
+Answer: the label is an attribute of a column name, we should keep 'AS' for changing the column names proper.
 4. **FORMAT wildcard**: `FORMAT *` with `RENAMING` — does it apply to all columns, or only type-compatible columns? (Proposed: only compatible columns, matching gt's behavior.)
+Answer: let's match gt's behavior and only work on compatible columns.
 5. **Output writer**: gt currently outputs to HTML, LaTeX, RTF, Word. Which writers should ggsql support first? (Proposed: HTML first, consistent with Vega-Lite being the first viz writer.)
+Answer: HTML first. Other outputs are in the distant future.
 6. **Locale inheritance**: Should a global locale setting propagate to all `FORMAT ... RENAMING` clauses (matching gt's global locale)? (Proposed: yes.)
+Answer: Yes. Global locale is set via `TABULATE ... SETTING locale => '...'` and propagates to all FORMAT clauses. Per-column override via `FORMAT ... SETTING locale => '...'`.
 7. **SCALE palette**: Should `SCALE` support named palettes (e.g., `TO 'viridis'`) in addition to explicit color pairs? (Proposed: yes, in a later phase.)
 8. **HIGHLIGHT multiple columns**: Can `HIGHLIGHT` target different columns with the same filter? (Proposed: yes — list columns after `HIGHLIGHT`.)
 9. **FORMAT SPAN nesting**: Can spanners be nested (multi-level)? (Proposed: yes — multiple `FORMAT SPAN` clauses with `level => <n>` parameter in `SETTING`.)
