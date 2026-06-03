@@ -17,11 +17,12 @@ Package*](https://rich-iannone.github.io/gt-effective-display-tables/) and the
 
 Only examples reproducible with the clauses defined in
 [GTSQL_PLAN.md](GTSQL_PLAN.md) are included. Excluded gt features (no GTSQL
-equivalent today) include: `groupname_col` / `tab_row_group()` row groups,
-multi-column stubs, `tab_stub_indent()`, `tab_footnote()`, per-cell footnotes,
-`row_order()`, `tab_spanner_delim()`, `cols_add()`, `grand_summary_rows()`,
-`text_transform()` with arbitrary R functions, `from_column()` dynamic
-parameters, nanoplots, and `tab_options()` theme tuning.
+equivalent today) include: `tab_row_group()` explicit row groups (basic
+`groupname_col` grouping *is* supported via `FACET <column>`), multi-column
+stubs, `tab_stub_indent()`, `tab_footnote()`, per-cell footnotes, `row_order()`,
+`tab_spanner_delim()`, `cols_add()`, `grand_summary_rows()`, `text_transform()`
+with arbitrary R functions, `from_column()` dynamic parameters, nanoplots, and
+`tab_options()` theme tuning.
 
 Each example assumes a SQL data source whose schema matches the corresponding R
 dataset (e.g. a `gtcars` table mirroring the `gtcars` tibble).
@@ -798,8 +799,9 @@ quarterly_sales |>
 **GTSQL**
 ```sql
 TABULATE product, revenue, units FROM quarterly_sales
-FACET revenue, units
-  SETTING aggregate => ('sum')
+FACET category
+  SETTING target => (revenue, units),
+          aggregate => ('sum')
 ```
 
 ---
@@ -821,7 +823,8 @@ sp500 |>
 
 **GTSQL**
 ```sql
-SELECT date, open, high, low, close
+SELECT date, open, high, low, close,
+       'Week of ' || strftime('%b %d', date('start of week')) AS week
 FROM sp500
 WHERE date BETWEEN '2015-01-05' AND '2015-01-16'
 
@@ -829,8 +832,9 @@ TABULATE date, open, high, low, close
 FORMAT STUB date
 FORMAT open, high, low, close
   RENAMING * => '{:num ,.2f}'
-FACET open, high, low, close
-  SETTING aggregate => ('min', 'max', 'mean'),
+FACET week
+  SETTING target => (open, high, low, close),
+          aggregate => ('min', 'max', 'mean'),
           label => ['Min', 'Max', 'Avg'],
           side => 'bottom'
 ```
@@ -983,7 +987,7 @@ WITH quarterly AS (
 
 TABULATE region, quarter, revenue, units, satisfaction FROM quarterly
 
-FORMAT STUB region
+FORMAT STUB quarter
 FORMAT SPAN revenue, units AS financial
 
 FORMAT revenue
@@ -993,8 +997,9 @@ FORMAT units
 FORMAT satisfaction
   RENAMING * => '{:num .1f}%'
 
-FACET revenue, units
-  SETTING aggregate => ('sum', 'mean'),
+FACET region
+  SETTING target => (revenue, units),
+          aggregate => ('sum', 'mean'),
           label => ['Total', 'Average'],
           side => 'bottom'
 
@@ -1021,7 +1026,6 @@ LABEL
 The following table types from the source book are intentionally **not** in the
 corpus because GTSQL cannot currently express them:
 
-- Tables relying on `groupname_col` row groups (e.g. pizzas grouped by `type`).
 - Multi-column stubs (`rowname_col = c("region", "category")`).
 - Tables with cell footnotes (`tab_footnote()`) or per-element styling of the
   table footer beyond `caption`.
@@ -1032,7 +1036,7 @@ corpus because GTSQL cannot currently express them:
   names — equivalent must be expressed via explicit `FORMAT SPAN` clauses.
 - Stub indentation (`tab_stub_indent()`).
 - Nanoplots (`cols_nanoplot()`).
-- `grand_summary_rows()` (only group-level `summary_rows()` maps to `FACET`).
+- `grand_summary_rows()` (table-wide totals; the closest GTSQL equivalent is a `FACET` clause with no grouping column, but this maps to `summary_rows()` semantics rather than a true grand summary).
 - `text_transform()` with arbitrary R functions; only literal value-to-string
   mapping is supported via `RENAMING <value> => '<string>'`.
 - `from_column()` dynamic parameters (e.g. per-row currency code or decimal
