@@ -59,6 +59,8 @@ SCALE background FROM (0, 10) TO ('white', 'red') VIA log10
   SETTING target => col1
 SCALE background TO ('#eee', '#d00')  -- auto domain from data
   SETTING target => col2
+SCALE background TO viridis            -- named palette
+  SETTING target => col3
 
 -- Arbitrary styling (can appear multiple times)
 HIGHLIGHT <column>, ...
@@ -403,7 +405,7 @@ SCALE <aesthetic> [FROM (<min>, <max>)] TO (<val1>, <val2>) [VIA <transform>]
   - `size` — font size
   - `opacity` — cell/text transparency (0–1 range; maps to alpha channel)
 - `FROM (<min>, <max>)` — the data domain (numeric range); **optional** — if omitted, the domain is inferred from the column’s actual data range (matching ggsql’s existing `SCALE` behavior and gt’s `domain = NULL` default)
-- `TO (<val1>, <val2>)` — the output range (colors for `background`/`foreground`; sizes for `size`)
+- `TO (<val1>, <val2>)` or `TO <palette_name>` — the output range. Either an explicit pair of values (colors for `background`/`foreground`; sizes for `size`; numeric for `opacity`) or a named palette (e.g., `viridis`, `blues`, `vik`). Named palettes use the same catalogue as `VISUALISE SCALE` — see [ggsql color palettes](https://ggsql.org/syntax/scale/aesthetic/1_color.html)
 - `VIA <transform>` — optional transform: `log10`, `sqrt`, `reverse`, etc.
 - `SETTING target => <column>` — which column to apply the scale to (**required**). In `VISUALISE`, the aesthetic target is implicit via `DRAW ... col AS fill`; in `TABULATE` there is no aesthetic binding syntax, so `target` explicitly names the column whose values drive the scale and receive the styled output
 - `FILTER <condition>` — **optional** row selection; only rows matching the condition receive the scaled styling (maps to gt’s `data_color(rows = ...)` / `tab_style(locations = cells_body(rows = ...))`) . Uses the same SQL-like expressions as `HIGHLIGHT ... FILTER`
@@ -435,11 +437,20 @@ SCALE background FROM (1000, 100000) TO ('white', 'darkgreen')
 -- Opacity scale: fade less important rows
 SCALE opacity FROM (0, 100) TO (0.3, 1.0)
   SETTING target => relevance_score
+
+-- Named palette (same syntax as VISUALISE SCALE)
+SCALE background TO viridis
+  SETTING target => temperature
+
+-- Named diverging palette with explicit domain
+SCALE background FROM (-1, 1) TO vik
+  SETTING target => correlation
 ```
 
 **gt mapping:**
 - `background`/`foreground` with `FROM` → `data_color(columns = ..., palette = c(...), domain = c(...))`
 - `background`/`foreground` without `FROM` → `data_color(columns = ..., palette = c(...), domain = NULL)`
+- Named palette (e.g., `TO viridis`) → `data_color(columns = ..., palette = "viridis")`
 - With `FILTER` → adds `rows = <condition>` to `data_color()` or `cells_body(rows = ...)`
 - `size` → `tab_style(style = cell_text(size = px(...)), locations = cells_body(...))` applied per-cell based on interpolated value
 - `opacity` → `tab_style(style = cell_fill(alpha = ...), locations = cells_body(...))` / `cell_text(color = rgba(...))` per-cell based on interpolated value
@@ -653,7 +664,8 @@ Answer: let's match gt's behavior and only work on compatible columns.
 Answer: HTML first. Other outputs are in the distant future.
 6. **Locale inheritance**: Should a global locale setting propagate to all `FORMAT ... RENAMING` clauses (matching gt's global locale)? (Proposed: yes.)
 Answer: Yes. Global locale is set via `TABULATE ... SETTING locale => '...'` and propagates to all FORMAT clauses. Per-column override via `FORMAT ... SETTING locale => '...'`.
-7. **SCALE palette**: Should `SCALE` support named palettes (e.g., `TO 'viridis'`) in addition to explicit color pairs? (Proposed: yes, in a later phase.)
+7. **SCALE palette**: Should `SCALE` support named palettes (e.g., `TO viridis`) in addition to explicit color pairs? (Proposed: yes, in a later phase.)
+Answer: Yes, from the start. ggsql VISUALISE already supports `TO <palette_name>` — TABULATE reuses the same syntax and palette catalogue (Crameri, ColorBrewer, Matplotlib, etc.).
 8. **HIGHLIGHT multiple columns**: Can `HIGHLIGHT` target different columns with the same filter? (Proposed: yes — list columns after `HIGHLIGHT`.)
 9. **FORMAT SPAN nesting**: Can spanners be nested (multi-level)? (Proposed: yes — multiple `FORMAT SPAN` clauses with `level => <n>` parameter in `SETTING`.)
 
