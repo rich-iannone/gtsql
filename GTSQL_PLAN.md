@@ -26,9 +26,9 @@ There are exactly **6 top-level clauses**. All other operations are subclauses n
 
 | Top-Level Clause | Purpose | Subclauses |
 |---|---|---|
-| `TABULATE` | Entry point, data source, column selection | `FROM`, `SETTING` |
+| `TABULATE` | Entry point, data source, column selection | `FROM` |
 | `FORMAT` | Per-column formatting, structure (span/stub) | `SETTING`, `RENAMING` |
-| `FACET` | Summary aggregation | `SUMMARIZE` |
+| `FACET` | Summary aggregation | `SETTING` |
 | `SCALE` | Continuous aesthetic mapping (color, size, opacity) | `SETTING`, `FILTER` |
 | `HIGHLIGHT` | Conditional cell styling | `FILTER`, `SETTING` |
 | `LABEL` | Text labels (title, subtitle, caption, column labels) | — |
@@ -43,24 +43,26 @@ SELECT columns FROM table WHERE conditions
 
 -- Entry point (required)
 TABULATE <column>, ... FROM <data-source>
-  SETTING locale => 'string'  -- optional global locale
 
 -- Formatting operations (can appear multiple times)
 FORMAT <SPAN|STUB> <column>, ... AS span1
   SETTING <param> => <value>, ...
   RENAMING <value> => <string>, ...
 
+FORMAT SPAN span1, col3 AS 'Combined'
+  RENAMING * => '{:num ,d}'
+
 -- Summary aggregation (can appear *only once*)
 FACET <column>, ...
-  SUMMARIZE <fn>, ..., <param> => <value>, ...
+  SETTING aggregate => ('min', 'max', 'mean')
 
 -- Styling based on numerical data (can appear multiple times)
 SCALE background FROM (0, 10) TO ('white', 'red') VIA log10
-  SETTING target => col1
+  SETTING target => (col1, col2)
 SCALE background TO ('#eee', '#d00')  -- auto domain from data
-  SETTING target => col2
+  SETTING target => (col2, col3)
 SCALE background TO viridis            -- named palette
-  SETTING target => col3
+  SETTING target => col4
 
 -- Arbitrary styling (can appear multiple times)
 HIGHLIGHT <column>, ...
@@ -88,7 +90,6 @@ The `TABULATE` clause marks the transition from SQL to table declaration, analog
 **Syntax:**
 ```sql
 TABULATE <column>, ... FROM <data-source>
-  SETTING <param> => <value>, ...
 ```
 
 **Behavior:**
@@ -97,9 +98,6 @@ TABULATE <column>, ... FROM <data-source>
 - If a preceding `SELECT` provides data, `FROM` is optional
 - Column order in `TABULATE` determines display order
 - `AS` renames a column for display (maps to `cols_label()`)
-
-**Settings:**
-- `locale => 'string'` — global locale for the table (e.g., `'de'`, `'fr-FR'`, `'pt-BR'`); propagates to all `FORMAT ... RENAMING` clauses unless overridden per-column (maps to gt's `locale` parameter in `fmt_*()` functions)
 
 **Examples:**
 ```sql
@@ -116,13 +114,9 @@ WITH monthly AS (
   SELECT month, SUM(revenue) as total FROM sales GROUP BY month
 )
 TABULATE * FROM monthly
-
--- Set a global locale (all FORMAT RENAMING inherits German formatting)
-TABULATE * FROM sales
-  SETTING locale => 'de'
 ```
 
-**gt mapping:** `gt(data, locale = "de")` with column selection/ordering handled by the engine.
+**gt mapping:** `gt(data, ...)` with column selection/ordering handled by the engine.
 
 ---
 
@@ -137,7 +131,7 @@ FORMAT [SPAN|STUB] <column>, ... [AS <name>]
   RENAMING <value> => <string>, ...
 ```
 
-- `SPAN` — groups columns under a spanner label (maps to `tab_spanner()`); `AS <name>` provides the spanner label
+- `SPAN` — groups columns (or other spanners) under a spanner label (maps to `tab_spanner()`); `AS <name>` provides the spanner label and defines a **spanner ID** that can be referenced in subsequent `FORMAT SPAN` clauses to create nested/stacked spanners
 - `STUB` — designates column(s) as the table stub / row labels (maps to `gt(rowname_col=...)`)
 - Without `SPAN`/`STUB` — standard formatting; `AS <name>` provides the stubhead label when used with a stub column
 
@@ -153,7 +147,7 @@ The `SETTING` subclause on `FORMAT` controls display properties:
 - `align => 'string'` — alignment: `'left'`, `'center'`, `'right'`, `'auto'` (maps to `cols_align()`)
 - `hide => true/false` — hide column from display (maps to `cols_hide()`)
 - `units => 'string'` — units notation (maps to `cols_units()`)
-- `locale => 'string'` — per-column locale override (e.g., `'fr'`, `'ja'`); takes precedence over the global locale set in `TABULATE SETTING` (maps to `locale` param in `fmt_*()` calls for this column)
+- `locale => 'string'` — locale for this column's formatting (e.g., `'fr'`, `'ja'`, `'pt-BR'`); controls number/date rendering in `RENAMING` (maps to `locale` param in `fmt_*()` calls for this column)
 
 **Example:**
 ```sql
@@ -172,7 +166,7 @@ FORMAT area
 FORMAT internal_id
   SETTING hide => true
 
--- Override locale for a specific column (French dates in a German table)
+-- Override locale for a specific column (French dates)
 FORMAT order_date
   SETTING locale => 'fr'
   RENAMING * => '{:time %d %B %Y}'
@@ -198,6 +192,8 @@ FORMAT <column>, ...
 - `0` — applies to zero values (maps to `sub_zero()`)
 - A literal value — direct value-to-label mapping (maps to `text_transform()`)
 
+**Precedence:** When multiple LHS entries appear in the same `RENAMING` clause, specific values take priority over `*`. The evaluation order is: literal values > `null` > `0` > `*`. For example, `RENAMING * => '{:num ,d}', 30 => 'Thirty'` formats all values as integers but substitutes the literal text `'Thirty'` for the value `30`.
+
 **Right-hand side (RHS) — string interpolation with formatters (ggsql-native):**
 - `'{}'` — insert value as-is
 - `'{:Title}'` — title-case
@@ -220,7 +216,7 @@ FORMAT satisfaction
 
 -- Format as integer with comma separators
 FORMAT units
-  RENAMING * => '{:num ,d}'
+  RENAMING * => '{:num ,d}', 30 => 'Thirty'
 
 -- Numeric formatting with forced sign
 FORMAT growth_rate
@@ -278,6 +274,15 @@ FORMAT STUB country AS 'Country'
 -- Two spanners grouping related columns
 FORMAT SPAN pop_2016, pop_2021 AS 'Population'
 FORMAT SPAN density_2016, density_2021 AS 'Density'
+
+-- Nested spanners: reference spanner IDs (AS labels) to stack
+FORMAT SPAN pop_2016, pop_2021 AS 'Population'
+FORMAT SPAN density_2016, density_2021 AS 'Density'
+FORMAT SPAN 'Population', 'Density' AS '2016–2021 Comparison'
+
+-- Mix spanner IDs and column names in a single SPAN
+FORMAT SPAN revenue, units AS 'Financial'
+FORMAT SPAN 'Financial', margin AS 'Performance'
 ```
 
 **Example 3: Numeric formatting with display properties**
@@ -318,10 +323,9 @@ FORMAT score_raw
   SETTING hide => true
 ```
 
-**Example 8: Per-column locale override**
+**Example 8: Per-column locale**
 ```sql
--- Global locale is German (set in TABULATE SETTING locale => 'de'),
--- but this column uses Brazilian Portuguese formatting
+-- Format this column using Brazilian Portuguese locale
 FORMAT preco
   SETTING locale => 'pt-BR'
   RENAMING * => '{:num ,.2f}'
@@ -336,25 +340,17 @@ The `FACET` clause adds summary/aggregation rows to the table, paralleling ggsql
 **Syntax:**
 ```sql
 FACET <column>, ...
-  SUMMARIZE <fn>, ..., <param> => <value>, ...
+  SETTING <param> => <value>, ...
 ```
 
-The columns listed after `FACET` specify which columns to aggregate.
+The columns listed after `FACET` specify which columns to aggregate. All configuration is via the `SETTING` subclause.
 
 ---
 
-#### 3.1 `FACET ... SUMMARIZE` — Summary Rows
+#### 3.1 `FACET ... SETTING` — Summary Configuration
 
-**Syntax:**
-```sql
-FACET <column>, ...
-  SUMMARIZE <fn>, ..., <param> => <value>, ...
-```
-
-**Aggregation functions** (same strings recognized by gt):
-`'min'`, `'max'`, `'mean'`, `'median'`, `'sd'`, `'sum'`
-
-**Parameters:**
+**Settings:**
+- `aggregate => (<fn>, ...)` — aggregation function(s) to apply (**required**). Recognized functions: `'min'`, `'max'`, `'mean'`, `'median'`, `'sd'`, `'sum'`
 - `groups => [grp1, grp2]` — which row groups (default: all)
 - `side => 'top'/'bottom'` — placement relative to group (default: `'bottom'`)
 - `label => 'string'` or `['label1', 'label2', ...]` — label(s) for the summary row(s)
@@ -365,22 +361,22 @@ FACET <column>, ...
 -- Minimal: single summary function with default placement (bottom)
 TABULATE product, revenue, units FROM quarterly_sales
 FACET revenue, units
-  SUMMARIZE 'sum'
+  SETTING aggregate => ('sum')
 
 -- Multiple functions with custom labels
 TABULATE date, open, high, low, close FROM sp500
 FORMAT STUB date
 FACET open, high, low, close
-  SUMMARIZE 'min', 'max', 'mean',
-            side => 'bottom', label => ['Min', 'Max', 'Avg']
+  SETTING aggregate => ('min', 'max', 'mean'),
+          side => 'bottom', label => ['Min', 'Max', 'Avg']
 
 -- Summary at the top, targeting specific row groups
 TABULATE region, quarter, revenue FROM sales
 FORMAT STUB region
 FACET revenue
-  SUMMARIZE 'mean',
-            side => 'top', groups => ['North', 'South'],
-            label => 'Avg', missing_text => '—'
+  SETTING aggregate => ('mean'),
+          side => 'top', groups => ['North', 'South'],
+          label => 'Avg', missing_text => '—'
 ```
 
 **gt mapping:** `summary_rows(columns = c(revenue, units), fns = list("sum"))`, `summary_rows(fns = list("min", "max", list(label = "Avg", fn = "mean")))`, `summary_rows(groups = c("North", "South"), side = "top", ...)`
@@ -394,7 +390,7 @@ The `SCALE` clause maps a continuous data range to a visual property range, appl
 **Syntax:**
 ```sql
 SCALE <aesthetic> [FROM (<min>, <max>)] TO (<val1>, <val2>) [VIA <transform>]
-  SETTING target => <column>
+  SETTING target => <column> | (<col1>, <col2>, ...)
   FILTER <condition>
 ```
 
@@ -407,7 +403,7 @@ SCALE <aesthetic> [FROM (<min>, <max>)] TO (<val1>, <val2>) [VIA <transform>]
 - `FROM (<min>, <max>)` — the data domain (numeric range); **optional** — if omitted, the domain is inferred from the column’s actual data range (matching ggsql’s existing `SCALE` behavior and gt’s `domain = NULL` default)
 - `TO (<val1>, <val2>)` or `TO <palette_name>` — the output range. Either an explicit pair of values (colors for `background`/`foreground`; sizes for `size`; numeric for `opacity`) or a named palette (e.g., `viridis`, `blues`, `vik`). Named palettes use the same catalogue as `VISUALISE SCALE` — see [ggsql color palettes](https://ggsql.org/syntax/scale/aesthetic/1_color.html)
 - `VIA <transform>` — optional transform: `log10`, `sqrt`, `reverse`, etc.
-- `SETTING target => <column>` — which column to apply the scale to (**required**). In `VISUALISE`, the aesthetic target is implicit via `DRAW ... col AS fill`; in `TABULATE` there is no aesthetic binding syntax, so `target` explicitly names the column whose values drive the scale and receive the styled output
+- `SETTING target => <column>` or `SETTING target => (<col1>, <col2>, ...)` — which column(s) to apply the scale to (**required**). Accepts a single column name or a parenthesized list of columns. When multiple columns are listed, the same scale is applied independently to each column (each column's values are mapped through the same domain→range). In `VISUALISE`, the aesthetic target is implicit via `DRAW ... col AS fill`; in `TABULATE` there is no aesthetic binding syntax, so `target` explicitly names the column(s) whose values drive the scale and receive the styled output
 - `FILTER <condition>` — **optional** row selection; only rows matching the condition receive the scaled styling (maps to gt’s `data_color(rows = ...)` / `tab_style(locations = cells_body(rows = ...))`) . Uses the same SQL-like expressions as `HIGHLIGHT ... FILTER`
 
 **Examples:**
@@ -473,7 +469,6 @@ HIGHLIGHT <column>, ...
 - `color => 'string'` — text color
 - `background => 'string'` — cell background color
 - `size => 'string'` — font size (e.g., `'14px'`, `'small'`)
-- `weight => 'string'` — font weight
 - `transform => 'uppercase'/'lowercase'` — text transform
 - `decoration => 'underline'/'line-through'/'overline'` — text decoration
 
@@ -523,7 +518,7 @@ Reserved keys (`title`, `subtitle`, `caption`) are recognized only when **unquot
 ```sql
 LABEL
   title => 'My Report',          -- sets the table title (reserved, unquoted)
-  'title' => 'Article Title'     -- labels a column named "title" (quoted identifier)
+  "title" => 'Article Title'     -- labels a column named "title" (quoted identifier)
 ```
 
 **Example:**
@@ -536,7 +531,7 @@ LABEL
   revenue => 'Revenue ($)',
   units => 'Units Sold',
   satisfaction => 'CSAT Score',
-  'title' => 'Deal Name'
+  "title" => 'Deal Name'
 ```
 
 **gt mapping:** `tab_header(title = ..., subtitle = ...)`, `tab_caption(caption = ...)`, `cols_label(revenue = "Revenue ($)", units = "Units Sold", satisfaction = "CSAT Score", title = "Deal Name")`
@@ -574,9 +569,9 @@ FORMAT satisfaction
 
 -- Summaries
 FACET revenue, units
-  SUMMARIZE 'sum', 'mean',
-            label => ['Total', 'Average'],
-            side => 'bottom'
+  SETTING aggregate => ('sum', 'mean'),
+          label => ['Total', 'Average'],
+          side => 'bottom'
 
 -- Conditional styling
 SCALE background FROM (0, 1) TO ('white', 'green')
@@ -623,7 +618,7 @@ LABEL
 | `cols_align()` | `FORMAT ... SETTING align => '...'` | `FORMAT` |
 | `cols_hide()` | `FORMAT ... SETTING hide => true` | `FORMAT` |
 | `cols_units()` | `FORMAT ... SETTING units => '...'` | `FORMAT` |
-| `summary_rows()` | `FACET ... SUMMARIZE` | `FACET` |
+| `summary_rows()` | `FACET ... SETTING aggregate => (...)` | `FACET` |
 | `data_color()` | `SCALE background/foreground FROM ... TO ...` | `SCALE` |
 | `tab_style()` (size) | `SCALE size FROM ... TO ...` | `SCALE` |
 | `tab_style()` (conditional) | `HIGHLIGHT ... FILTER ... SETTING` | `HIGHLIGHT` |
@@ -639,7 +634,7 @@ LABEL
 - HTML output via gt rendering engine
 
 ### Phase 2: Enrichment
-- `FACET` with `SUMMARIZE`
+- `FACET` with `SETTING aggregate => (...)`
 - `FORMAT ... RENAMING` additions: date/time formatters, `null =>`, `0 =>`, direct value mapping
 - `SCALE` for continuous color mapping
 - `HIGHLIGHT` for conditional cell styling
@@ -668,12 +663,13 @@ Answer: let's match gt's behavior and only work on compatible columns.
 5. **Output writer**: gt currently outputs to HTML, LaTeX, RTF, Word. Which writers should ggsql support first? (Proposed: HTML first, consistent with Vega-Lite being the first viz writer.)
 Answer: HTML first. Other outputs are in the distant future.
 6. **Locale inheritance**: Should a global locale setting propagate to all `FORMAT ... RENAMING` clauses (matching gt's global locale)? (Proposed: yes.)
-Answer: Yes. Global locale is set via `TABULATE ... SETTING locale => '...'` and propagates to all FORMAT clauses. Per-column override via `FORMAT ... SETTING locale => '...'`.
+Answer: No global locale. Locale is set per-column via `FORMAT ... SETTING locale => '...'`. This avoids implicit inheritance and keeps each FORMAT clause self-contained.
 7. **SCALE palette**: Should `SCALE` support named palettes (e.g., `TO viridis`) in addition to explicit color pairs? (Proposed: yes, in a later phase.)
 Answer: Yes, from the start. ggsql VISUALISE already supports `TO <palette_name>` — TABULATE reuses the same syntax and palette catalogue (Crameri, ColorBrewer, Matplotlib, etc.).
 8. **HIGHLIGHT multiple columns**: Can `HIGHLIGHT` target different columns with the same filter? (Proposed: yes — list columns after `HIGHLIGHT`.)
 Answer: Yes. Multiple columns listed after `HIGHLIGHT` all receive the same style when the filter matches. This maps to `cells_body(columns = c(...), rows = ...)`.
-9. **FORMAT SPAN nesting**: Can spanners be nested (multi-level)? (Proposed: yes — multiple `FORMAT SPAN` clauses with `level => <n>` parameter in `SETTING`.)
+9. **FORMAT SPAN nesting**: Can spanners be nested (multi-level)? (Proposed: yes — reference spanner IDs in subsequent `FORMAT SPAN` clauses.)
+Answer: Yes. Reference spanner IDs (the `AS` label) in subsequent `FORMAT SPAN` clauses to stack spanners. E.g., `FORMAT SPAN 'Population', 'Density' AS 'Comparison'` creates a parent spanner over the two child spanners. Column names and spanner IDs can be mixed in the same `SPAN` list.
 
 ---
 
@@ -686,7 +682,7 @@ Answer: Yes. Multiple columns listed after `HIGHLIGHT` all receive the same styl
 | Layers | `DRAW <type>` | `FORMAT` (per-column formatting) |
 | Formatting | `SCALE` + `RENAMING` | `FORMAT ... RENAMING` (same syntax!) |
 | Color scales | `SCALE` | `SCALE` (same keyword!) |
-| Structure | `FACET` | `FACET` (SUMMARIZE) |
+| Structure | `FACET` | `FACET` (SETTING) |
 | Conditional | (via aesthetics) | `HIGHLIGHT` (conditional cell styling) |
 | Annotations | `PLACE`, `LABEL` | `LABEL` (title, subtitle, caption) |
 | Labels | `LABEL title =>` | `LABEL title =>` (same keyword!) |
