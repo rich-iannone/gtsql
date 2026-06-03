@@ -28,7 +28,7 @@ There are exactly **6 top-level clauses**. All other operations are subclauses n
 |---|---|---|
 | `TABULATE` | Entry point, data source, column selection | `FROM` |
 | `FORMAT` | Per-column formatting, structure (span/stub) | `SETTING`, `RENAMING` |
-| `FACET` | Summary aggregation | `SETTING` |
+| `FACET` | Row grouping and summary aggregation | `SETTING` |
 | `SCALE` | Continuous aesthetic mapping (color, size, opacity) | `SETTING`, `FILTER` |
 | `HIGHLIGHT` | Conditional cell styling | `FILTER`, `SETTING` |
 | `LABEL` | Text labels (title, subtitle, caption, column labels) | — |
@@ -45,16 +45,17 @@ SELECT columns FROM table WHERE conditions
 TABULATE <column>, ... FROM <data-source>
 
 -- Formatting operations (can appear multiple times)
-FORMAT <SPAN|STUB> <column>, ... AS span1
+FORMAT <SPAN|STUB> <column>, ... AS <id>
   SETTING <param> => <value>, ...
   RENAMING <value> => <string>, ...
 
-FORMAT SPAN span1, col3 AS 'Combined'
+FORMAT SPAN span1, col3 AS combined
   RENAMING * => '{:num ,d}'
 
--- Summary aggregation (can appear *only once*)
-FACET <column>, ...
-  SETTING aggregate => ('min', 'max', 'mean')
+-- Row grouping and/or summary aggregation (can appear *only once*)
+FACET [<group_col>, ...]
+  SETTING target => (<col>, ...),
+          aggregate => ('min', 'max', 'mean')
 
 -- Styling based on numerical data (can appear multiple times)
 SCALE background FROM (0, 10) TO ('white', 'red') VIA log10
@@ -126,14 +127,16 @@ The `FORMAT` clause is the workhorse for everything that operates on individual 
 
 **Syntax:**
 ```sql
-FORMAT [SPAN|STUB] <column>, ... [AS <name>]
+FORMAT [SPAN|STUB] <column>, ... [AS <id>]
   SETTING <param> => <value>, ...
   RENAMING <value> => <string>, ...
 ```
 
-- `SPAN` — groups columns (or other spanners) under a spanner label (maps to `tab_spanner()`); `AS <name>` provides the spanner label and defines a **spanner ID** that can be referenced in subsequent `FORMAT SPAN` clauses to create nested/stacked spanners
+- `SPAN` — groups columns (or other spanners) under a spanner (maps to `tab_spanner()`); `AS <id>` is a **bareword identifier** that names the spanner. The identifier is *also* the default display label, so a spanner with `AS region_totals` renders as `region_totals` in the header until you override it via the `LABEL` clause (`LABEL region_totals => 'Regional Totals'`). The identifier is what later `FORMAT SPAN` clauses reference when nesting spanners.
 - `STUB` — designates column(s) as the table stub / row labels (maps to `gt(rowname_col=...)`)
-- Without `SPAN`/`STUB` — standard formatting; `AS <name>` provides the stubhead label when used with a stub column
+- Without `SPAN`/`STUB` — standard formatting; `AS <id>` on a stub column names the stubhead (also relabel-able via `LABEL`)
+
+Quoting rule: `AS` takes a bareword identifier — never a quoted string. Display text (with spaces, punctuation, non-ASCII characters, etc.) belongs in the `LABEL` clause, where strings are quoted. This keeps the identifier role (spanner ID) syntactically distinct from the display role (label string).
 
 All subclauses within `FORMAT` are optional. Multiple `FORMAT` clauses can appear to address different columns.
 
@@ -154,9 +157,14 @@ The `SETTING` subclause on `FORMAT` controls display properties:
 -- Designate stub column
 FORMAT STUB model
 
--- Create a spanner grouping
-FORMAT SPAN pop_2016, pop_2021 AS 'Population'
-FORMAT SPAN density_2016, density_2021 AS 'Density'
+-- Create a spanner grouping (bareword ID; default label = ID)
+FORMAT SPAN pop_2016, pop_2021 AS population
+FORMAT SPAN density_2016, density_2021 AS density
+
+-- Override the displayed labels later via LABEL
+LABEL
+  population => 'Population',
+  density => 'Density'
 
 -- Set display properties
 FORMAT population
@@ -172,7 +180,7 @@ FORMAT order_date
   RENAMING * => '{:time %d %B %Y}'
 ```
 
-**gt mapping:** `gt(rowname_col = "model")`, `tab_spanner(label = "Population", columns = c(pop_2016, pop_2021))`, `cols_width(population ~ px(150))`, `cols_align(align = "right", columns = population)`, `cols_hide(columns = internal_id)`, `fmt_date(columns = order_date, locale = "fr")`
+**gt mapping:** `gt(rowname_col = "model")`, `tab_spanner(id = "population", label = "Population", columns = c(pop_2016, pop_2021))`, `cols_width(population ~ px(150))`, `cols_align(align = "right", columns = population)`, `cols_hide(columns = internal_id)`, `fmt_date(columns = order_date, locale = "fr")`
 
 ---
 
@@ -265,24 +273,31 @@ Below are representative examples showing the range of `FORMAT` usage patterns.
 
 **Example 1: Designate a stub and label it**
 ```sql
--- The 'country' column becomes the row label; AS provides stubhead text
-FORMAT STUB country AS 'Country'
+-- The 'country' column becomes the row label; AS names the stubhead
+FORMAT STUB country AS country_head
+LABEL country_head => 'Country'
 ```
 
 **Example 2: Group columns under a spanner**
 ```sql
--- Two spanners grouping related columns
-FORMAT SPAN pop_2016, pop_2021 AS 'Population'
-FORMAT SPAN density_2016, density_2021 AS 'Density'
+-- Two spanners grouping related columns (IDs serve as default labels)
+FORMAT SPAN pop_2016, pop_2021 AS population
+FORMAT SPAN density_2016, density_2021 AS density
 
--- Nested spanners: reference spanner IDs (AS labels) to stack
-FORMAT SPAN pop_2016, pop_2021 AS 'Population'
-FORMAT SPAN density_2016, density_2021 AS 'Density'
-FORMAT SPAN 'Population', 'Density' AS '2016–2021 Comparison'
+-- Nested spanners: reference spanner IDs to stack
+FORMAT SPAN pop_2016, pop_2021 AS population
+FORMAT SPAN density_2016, density_2021 AS density
+FORMAT SPAN population, density AS comparison
+
+-- Override displayed labels for spanners (and any column) via LABEL
+LABEL
+  population => 'Population',
+  density => 'Density',
+  comparison => '2016–2021 Comparison'
 
 -- Mix spanner IDs and column names in a single SPAN
-FORMAT SPAN revenue, units AS 'Financial'
-FORMAT SPAN 'Financial', margin AS 'Performance'
+FORMAT SPAN revenue, units AS financial
+FORMAT SPAN financial, margin AS performance
 ```
 
 **Example 3: Numeric formatting with display properties**
@@ -333,53 +348,77 @@ FORMAT preco
 
 ---
 
-### 3. `FACET` — Summary Aggregation (maps to `summary_rows()`)
+### 3. `FACET` — Row Grouping and Summary Aggregation (maps to `gt(groupname_col=...)`, `summary_rows()`)
 
-The `FACET` clause adds summary/aggregation rows to the table, paralleling ggsql's existing `FACET` clause in `VISUALISE`. In the table context, it targets specific columns for aggregation.
+The `FACET` clause has two related responsibilities: partitioning rows into **row groups** and adding **summary/aggregation rows**. The column(s) listed after `FACET` define the grouping; the `SETTING` subclause configures which columns are aggregated and how. Either responsibility can be used on its own — grouping without summaries, or summaries without grouping (table-wide totals).
 
 **Syntax:**
 ```sql
-FACET <column>, ...
+FACET [<group_col>, ...]
   SETTING <param> => <value>, ...
 ```
 
-The columns listed after `FACET` specify which columns to aggregate. All configuration is via the `SETTING` subclause.
+- `<group_col>, ...` — **optional**. Column(s) whose distinct values partition rows into row groups, with a group-label row inserted before each group's body rows (maps to `gt(groupname_col=...)`). Listed grouping columns are removed from the body. If omitted, no row grouping is applied and any summaries span the whole table.
+- All other configuration (which columns to aggregate, which functions, placement, labels) is supplied via `SETTING`.
+
+Only one `FACET` clause may appear per query.
 
 ---
 
-#### 3.1 `FACET ... SETTING` — Summary Configuration
+#### 3.1 `FACET ... SETTING` — Aggregation Configuration
 
 **Settings:**
-- `aggregate => (<fn>, ...)` — aggregation function(s) to apply (**required**). Recognized functions: `'min'`, `'max'`, `'mean'`, `'median'`, `'sd'`, `'sum'`
-- `groups => [grp1, grp2]` — which row groups (default: all)
-- `side => 'top'/'bottom'` — placement relative to group (default: `'bottom'`)
+- `target => <column>` or `target => (<col1>, <col2>, ...)` — column(s) to aggregate (maps to `summary_rows(columns = ...)`). Required when `aggregate` is set. Mirrors the `target` syntax used in `SCALE`.
+- `aggregate => (<fn>, ...)` — aggregation function(s) to apply. Recognized functions: `'min'`, `'max'`, `'mean'`, `'median'`, `'sd'`, `'sum'`. Required when `target` is set. Omit both `target` and `aggregate` to use `FACET` purely for row grouping.
+- `groups => [grp1, grp2]` — restrict summary rows to specific group values from the `<group_col>` (default: all groups). Only meaningful when `FACET` has a grouping column.
+- `side => 'top'/'bottom'` — placement of summary rows relative to each group (default: `'bottom'`)
 - `label => 'string'` or `['label1', 'label2', ...]` — label(s) for the summary row(s)
 - `missing_text => 'string'` — text for non-aggregable cells
 
 **Examples:**
 ```sql
--- Minimal: single summary function with default placement (bottom)
+-- Group rows by category and sum revenue/units within each group
 TABULATE product, revenue, units FROM quarterly_sales
-FACET revenue, units
-  SETTING aggregate => ('sum')
+FACET category
+  SETTING target => (revenue, units),
+          aggregate => ('sum')
 
--- Multiple functions with custom labels
+-- Grouping only, no summary (just gt(groupname_col = 'category'))
+TABULATE product, revenue, units FROM quarterly_sales
+FACET category
+
+-- Summary only, no grouping: table-wide totals
+TABULATE product, revenue, units FROM quarterly_sales
+FACET
+  SETTING target => (revenue, units),
+          aggregate => ('sum')
+
+-- Multiple aggregation functions with custom labels
 TABULATE date, open, high, low, close FROM sp500
 FORMAT STUB date
-FACET open, high, low, close
-  SETTING aggregate => ('min', 'max', 'mean'),
-          side => 'bottom', label => ['Min', 'Max', 'Avg']
+FACET
+  SETTING target => (open, high, low, close),
+          aggregate => ('min', 'max', 'mean'),
+          side => 'bottom',
+          label => ['Min', 'Max', 'Avg']
 
--- Summary at the top, targeting specific row groups
+-- Grouped summary at the top, restricted to specific group values
 TABULATE region, quarter, revenue FROM sales
-FORMAT STUB region
-FACET revenue
-  SETTING aggregate => ('mean'),
-          side => 'top', groups => ['North', 'South'],
-          label => 'Avg', missing_text => '—'
+FACET region
+  SETTING target => revenue,
+          aggregate => ('mean'),
+          side => 'top',
+          groups => ['North', 'South'],
+          label => 'Avg',
+          missing_text => '—'
 ```
 
-**gt mapping:** `summary_rows(columns = c(revenue, units), fns = list("sum"))`, `summary_rows(fns = list("min", "max", list(label = "Avg", fn = "mean")))`, `summary_rows(groups = c("North", "South"), side = "top", ...)`
+**gt mapping:**
+- `FACET category` → `gt(groupname_col = "category")`
+- `FACET category SETTING target => (revenue, units), aggregate => ('sum')` → `gt(groupname_col = "category") |> summary_rows(columns = c(revenue, units), fns = list("sum"))`
+- `FACET SETTING target => (revenue, units), aggregate => ('sum')` → `summary_rows(columns = c(revenue, units), fns = list("sum"))` (no grouping)
+- `aggregate => ('min', 'max', 'mean'), label => ['Min', 'Max', 'Avg']` → `summary_rows(fns = list(list(label = "Min", fn = "min"), list(label = "Max", fn = "max"), list(label = "Avg", fn = "mean")))`
+- `groups => ['North', 'South']` → `summary_rows(groups = c("North", "South"), ...)`
 
 ---
 
@@ -559,7 +598,7 @@ TABULATE region, quarter, revenue, units, satisfaction FROM quarterly
 
 -- Formatting operations
 FORMAT STUB region
-FORMAT SPAN revenue, units AS 'Financial'
+FORMAT SPAN revenue, units AS financial
 FORMAT revenue
   RENAMING * => '${:num ,.1f}'
 FORMAT units
@@ -567,9 +606,10 @@ FORMAT units
 FORMAT satisfaction
   RENAMING * => '{:num .1f}%'
 
--- Summaries
-FACET revenue, units
-  SETTING aggregate => ('sum', 'mean'),
+-- Summaries (table-wide totals; no row grouping)
+FACET
+  SETTING target => (revenue, units),
+          aggregate => ('sum', 'mean'),
           label => ['Total', 'Average'],
           side => 'bottom'
 
@@ -585,6 +625,7 @@ HIGHLIGHT satisfaction
 LABEL
   title => '2024 Sales Performance',
   subtitle => 'By Region and Quarter',
+  financial => 'Financial',
   revenue => 'Revenue',
   units => 'Units Sold',
   satisfaction => 'CSAT Score'
@@ -598,10 +639,11 @@ LABEL
 |---|---|---|
 | `gt()` | `TABULATE ... FROM` | — |
 | `gt(rowname_col)` | `FORMAT STUB <column>` | `FORMAT` |
+| `gt(groupname_col)` | `FACET <column>` | `FACET` |
 | `tab_header()` | `LABEL title =>, subtitle =>` | `LABEL` |
 | `tab_caption()` | `LABEL caption =>` | `LABEL` |
-| `tab_spanner()` | `FORMAT SPAN <columns> AS 'label'` | `FORMAT` |
-| `tab_stubhead()` | `FORMAT STUB <column> AS 'label'` | `FORMAT` |
+| `tab_spanner()` | `FORMAT SPAN <columns> AS <id>` | `FORMAT` |
+| `tab_stubhead()` | `FORMAT STUB <column> AS <id>` | `FORMAT` |
 | `fmt_number()` | `FORMAT ... RENAMING * => '{:num ...}'` | `FORMAT` |
 | `fmt_integer()` | `FORMAT ... RENAMING * => '{:num ,d}'` | `FORMAT` |
 | `fmt_percent()` | `FORMAT ... RENAMING * => '{:num .1f}%'` | `FORMAT` |
@@ -618,7 +660,7 @@ LABEL
 | `cols_align()` | `FORMAT ... SETTING align => '...'` | `FORMAT` |
 | `cols_hide()` | `FORMAT ... SETTING hide => true` | `FORMAT` |
 | `cols_units()` | `FORMAT ... SETTING units => '...'` | `FORMAT` |
-| `summary_rows()` | `FACET ... SETTING aggregate => (...)` | `FACET` |
+| `summary_rows()` | `FACET ... SETTING target => (...), aggregate => (...)` | `FACET` |
 | `data_color()` | `SCALE background/foreground FROM ... TO ...` | `SCALE` |
 | `tab_style()` (size) | `SCALE size FROM ... TO ...` | `SCALE` |
 | `tab_style()` (conditional) | `HIGHLIGHT ... FILTER ... SETTING` | `HIGHLIGHT` |
@@ -669,7 +711,7 @@ Answer: Yes, from the start. ggsql VISUALISE already supports `TO <palette_name>
 8. **HIGHLIGHT multiple columns**: Can `HIGHLIGHT` target different columns with the same filter? (Proposed: yes — list columns after `HIGHLIGHT`.)
 Answer: Yes. Multiple columns listed after `HIGHLIGHT` all receive the same style when the filter matches. This maps to `cells_body(columns = c(...), rows = ...)`.
 9. **FORMAT SPAN nesting**: Can spanners be nested (multi-level)? (Proposed: yes — reference spanner IDs in subsequent `FORMAT SPAN` clauses.)
-Answer: Yes. Reference spanner IDs (the `AS` label) in subsequent `FORMAT SPAN` clauses to stack spanners. E.g., `FORMAT SPAN 'Population', 'Density' AS 'Comparison'` creates a parent spanner over the two child spanners. Column names and spanner IDs can be mixed in the same `SPAN` list.
+Answer: Yes. `AS <id>` introduces a bareword spanner identifier; the identifier doubles as the default display label and can be referenced in later `FORMAT SPAN` clauses to stack spanners. E.g., `FORMAT SPAN population, density AS comparison` creates a parent spanner over the two child spanners. Column names and spanner IDs can be mixed in the same `SPAN` list (they share an identifier namespace). To customize the displayed text, override the label in the `LABEL` clause (`LABEL comparison => '2016–2021 Comparison'`). `AS` never accepts a quoted string — display text lives only in `LABEL`.
 
 ---
 
@@ -678,7 +720,7 @@ Answer: Yes. Reference spanner IDs (the `AS` label) in subsequent `FORMAT SPAN` 
 | Aspect | VISUALISE (plots) | TABULATE (tables) |
 |---|---|---|
 | Entry point | `VISUALISE` | `TABULATE` |
-| Data binding | Aesthetic mappings (`col AS x`) | Column selection (`col`, `col AS 'Label'`) |
+| Data binding | Aesthetic mappings (`col AS x`) | Column selection (`col`); spanner IDs via `FORMAT SPAN ... AS <id>` |
 | Layers | `DRAW <type>` | `FORMAT` (per-column formatting) |
 | Formatting | `SCALE` + `RENAMING` | `FORMAT ... RENAMING` (same syntax!) |
 | Color scales | `SCALE` | `SCALE` (same keyword!) |

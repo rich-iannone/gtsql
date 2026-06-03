@@ -1,0 +1,1040 @@
+---
+format: html
+html-table-processing: none
+---
+
+```{r}
+library(gt)
+library(tidyverse)
+```
+
+# GTSQL Examples Corpus
+
+Paired **gt** (R) and **GTSQL** examples reproducing the same display table.
+Examples are drawn from [*Creating Effective Display Tables with the gt
+Package*](https://rich-iannone.github.io/gt-effective-display-tables/) and the
+[gt reference](https://gt.rstudio.com/reference/).
+
+Only examples reproducible with the clauses defined in
+[GTSQL_PLAN.md](GTSQL_PLAN.md) are included. Excluded gt features (no GTSQL
+equivalent today) include: `groupname_col` / `tab_row_group()` row groups,
+multi-column stubs, `tab_stub_indent()`, `tab_footnote()`, per-cell footnotes,
+`row_order()`, `tab_spanner_delim()`, `cols_add()`, `grand_summary_rows()`,
+`text_transform()` with arbitrary R functions, `from_column()` dynamic
+parameters, nanoplots, and `tab_options()` theme tuning.
+
+Each example assumes a SQL data source whose schema matches the corresponding R
+dataset (e.g. a `gtcars` table mirroring the `gtcars` tibble).
+
+---
+
+## 1. Minimal table — all columns
+
+**gt**
+```{r}
+exibble |>
+  gt()
+```
+
+**GTSQL**
+```sql
+TABULATE * FROM exibble
+```
+
+---
+
+## 2. Column selection and reordering
+
+**gt**
+```{r}
+gtcars |>
+  dplyr::select(mfr, model, year, hp) |>
+  dplyr::slice_head(n = 6) |>
+  gt()
+```
+
+**GTSQL**
+```sql
+SELECT mfr, model, year, hp FROM gtcars LIMIT 6
+TABULATE mfr, model, year, hp
+```
+
+---
+
+## 3. Stub from a row-label column
+
+**gt**
+```{r}
+gtcars |>
+  dplyr::select(model, year, hp, trq) |>
+  dplyr::slice(1:5) |>
+  gt(rowname_col = "model") |>
+  tab_stubhead(label = "car")
+```
+
+**GTSQL**
+```sql
+SELECT model, year, hp, trq FROM gtcars LIMIT 5
+TABULATE model, year, hp, trq
+FORMAT STUB model AS model_head
+LABEL model_head => 'car'
+```
+
+---
+
+## 4. Header with title and subtitle
+
+**gt**
+```{r}
+gtcars |>
+  dplyr::select(mfr, model, msrp) |>
+  dplyr::slice(1:5) |>
+  gt() |>
+  tab_header(
+    title = "Data listing from gtcars",
+    subtitle = "gtcars is an R dataset"
+  )
+```
+
+**GTSQL**
+```sql
+SELECT mfr, model, msrp FROM gtcars LIMIT 5
+TABULATE mfr, model, msrp
+LABEL
+  title => 'Data listing from gtcars',
+  subtitle => 'gtcars is an R dataset'
+```
+
+---
+
+## 5. Header + source-note caption + column labels
+
+**gt**
+```{r}
+towny |>
+  dplyr::select(name, population_2021, density_2021) |>
+  dplyr::slice_max(population_2021, n = 8) |>
+  gt() |>
+  tab_header(
+    title = "Ontario's Largest Municipalities",
+    subtitle = "Population and density from the 2021 census"
+  ) |>
+  fmt_integer(columns = c(population_2021, density_2021)) |>
+  cols_label(
+    name = "Municipality",
+    population_2021 = "Population",
+    density_2021 = "Density (per km²)"
+  ) |>
+  tab_source_note(source_note = "Source: Statistics Canada")
+```
+
+**GTSQL**
+```sql
+SELECT name, population_2021, density_2021
+FROM towny
+ORDER BY population_2021 DESC
+LIMIT 8
+
+TABULATE name, population_2021, density_2021
+FORMAT population_2021, density_2021
+  RENAMING * => '{:num ,d}'
+LABEL
+  title => 'Ontario''s Largest Municipalities',
+  subtitle => 'Population and density from the 2021 census',
+  caption => 'Source: Statistics Canada',
+  name => 'Municipality',
+  population_2021 => 'Population',
+  density_2021 => 'Density (per km²)'
+```
+
+---
+
+## 6. Single spanner over related columns
+
+**gt**
+```{r}
+gtcars |>
+  dplyr::select(year, model, bdy_style, starts_with(c("hp", "trq", "mpg"))) |>
+  dplyr::slice(1:8) |>
+  gt(rowname_col = "model") |>
+  tab_spanner(
+    label = "performance",
+    columns = starts_with(c("hp", "trq", "mpg"))
+  )
+```
+
+**GTSQL**
+```sql
+SELECT year, model, bdy_style, hp, hp_rpm, trq, trq_rpm, mpg_c, mpg_h
+FROM gtcars LIMIT 8
+
+TABULATE year, model, bdy_style, hp, hp_rpm, trq, trq_rpm, mpg_c, mpg_h
+FORMAT STUB model
+FORMAT SPAN hp, hp_rpm, trq, trq_rpm, mpg_c, mpg_h AS performance
+```
+
+---
+
+## 7. Two side-by-side spanners
+
+**gt**
+```{r}
+towny |>
+  dplyr::arrange(desc(population_2021)) |>
+  dplyr::slice_head(n = 5) |>
+  dplyr::select(name, ends_with("2016"), ends_with("2021")) |>
+  gt() |>
+  tab_spanner(columns = starts_with("pop"),     label = "Population") |>
+  tab_spanner(columns = starts_with("den"),     label = "Density")
+```
+
+**GTSQL**
+```sql
+SELECT name, population_2016, density_2016, population_2021, density_2021
+FROM towny
+ORDER BY population_2021 DESC
+LIMIT 5
+
+TABULATE name, population_2016, population_2021, density_2016, density_2021
+FORMAT SPAN population_2016, population_2021 AS population
+FORMAT SPAN density_2016, density_2021 AS density
+LABEL
+  population => 'Population',
+  density => 'Density'
+```
+
+---
+
+## 8. Nested (stacked) spanners
+
+**gt**
+```{r}
+towny |>
+  dplyr::arrange(desc(population_2021)) |>
+  dplyr::slice_head(n = 5) |>
+  dplyr::select(name, ends_with("2016"), ends_with("2021")) |>
+  gt() |>
+  tab_spanner(columns = c(population_2016, population_2021), label = "Population", id = "pop") |>
+  tab_spanner(columns = c(density_2016, density_2021),       label = "Density",    id = "den") |>
+  tab_spanner(spanners = c("pop", "den"), label = "2016–2021 Comparison")
+```
+
+**GTSQL**
+```sql
+SELECT name, population_2016, population_2021, density_2016, density_2021
+FROM towny
+ORDER BY population_2021 DESC
+LIMIT 5
+
+TABULATE name, population_2016, population_2021, density_2016, density_2021
+FORMAT SPAN population_2016, population_2021 AS population
+FORMAT SPAN density_2016, density_2021 AS density
+FORMAT SPAN population, density AS comparison
+LABEL
+  population => 'Population',
+  density => 'Density',
+  comparison => '2016–2021 Comparison'
+```
+
+---
+
+## 9. Hide a column
+
+**gt**
+```{r}
+gtcars |>
+  dplyr::select(mfr, model, year, hp) |>
+  dplyr::slice_head(n = 6) |>
+  gt() |>
+  cols_hide(columns = mfr)
+```
+
+**GTSQL**
+```sql
+SELECT mfr, model, year, hp FROM gtcars LIMIT 6
+TABULATE mfr, model, year, hp
+FORMAT mfr
+  SETTING hide => true
+```
+
+---
+
+## 10. Column widths and alignment
+
+**gt**
+```{r}
+gtcars |>
+  dplyr::select(model, hp, msrp) |>
+  dplyr::slice(1:5) |>
+  gt() |>
+  cols_align(align = "right",  columns = c(hp, msrp)) |>
+  cols_width(
+    model ~ px(180),
+    hp    ~ px(80),
+    msrp  ~ px(120)
+  )
+```
+
+**GTSQL**
+```sql
+SELECT model, hp, msrp FROM gtcars LIMIT 5
+TABULATE model, hp, msrp
+FORMAT model
+  SETTING width => '180px'
+FORMAT hp
+  SETTING width => '80px', align => 'right'
+FORMAT msrp
+  SETTING width => '120px', align => 'right'
+```
+
+---
+
+## 11. Number formatting — 3 decimals, no separators
+
+**gt**
+```{r}
+exibble |>
+  dplyr::select(num, char) |>
+  gt() |>
+  fmt_number(columns = num, decimals = 3, use_seps = FALSE)
+```
+
+**GTSQL**
+```sql
+TABULATE num, char FROM exibble
+FORMAT num
+  RENAMING * => '{:num .3f}'
+```
+
+---
+
+## 12. Integer formatting with digit separators
+
+**gt**
+```{r}
+exibble |>
+  dplyr::select(num, char) |>
+  gt() |>
+  fmt_integer(columns = num)
+```
+
+**GTSQL**
+```sql
+TABULATE num, char FROM exibble
+FORMAT num
+  RENAMING * => '{:num ,d}'
+```
+
+---
+
+## 13. Currency formatting (USD)
+
+**gt**
+```{r}
+gtcars |>
+  dplyr::select(model, year, hp, msrp) |>
+  dplyr::slice_head(n = 8) |>
+  gt(rowname_col = "model") |>
+  fmt_integer(columns = hp) |>
+  fmt_currency(columns = msrp, currency = "USD", decimals = 0)
+```
+
+**GTSQL**
+```sql
+SELECT model, year, hp, msrp FROM gtcars LIMIT 8
+TABULATE model, year, hp, msrp
+FORMAT STUB model
+FORMAT hp
+  RENAMING * => '{:num ,d}'
+FORMAT msrp
+  RENAMING * => '${:num ,d}'
+```
+
+---
+
+## 14. Percent formatting from proportions
+
+**gt**
+```{r}
+pizzaplace |>
+  dplyr::mutate(month = as.numeric(substr(date, 6, 7))) |>
+  dplyr::count(month, name = "pizzas_sold") |>
+  dplyr::mutate(pct_of_annual = pizzas_sold / sum(pizzas_sold)) |>
+  gt(rowname_col = "month") |>
+  fmt_integer(columns = pizzas_sold) |>
+  fmt_percent(columns = pct_of_annual, decimals = 1)
+```
+
+**GTSQL**
+```sql
+WITH monthly AS (
+  SELECT CAST(SUBSTR(date, 6, 2) AS INT) AS month, COUNT(*) AS pizzas_sold
+  FROM pizzaplace
+  GROUP BY 1
+),
+totals AS (SELECT SUM(pizzas_sold) AS total FROM monthly)
+SELECT m.month, m.pizzas_sold, 1.0 * m.pizzas_sold / t.total AS pct_of_annual
+FROM monthly m CROSS JOIN totals t
+
+TABULATE month, pizzas_sold, pct_of_annual
+FORMAT STUB month
+FORMAT pizzas_sold
+  RENAMING * => '{:num ,d}'
+FORMAT pct_of_annual
+  RENAMING * => '{:num .1f}%'
+```
+
+---
+
+## 15. Scientific notation
+
+**gt**
+```{r}
+dplyr::tibble(
+  small = 10^(-6:-1),
+  large = 10^(1:6)
+) |>
+  gt() |>
+  fmt_scientific()
+```
+
+**GTSQL**
+```sql
+TABULATE small, large FROM powers
+FORMAT small, large
+  RENAMING * => '{:num .2e}'
+```
+
+---
+
+## 16. Date formatting
+
+**gt**
+```{r}
+exibble |>
+  dplyr::select(date, time) |>
+  gt() |>
+  fmt_date(columns = date, date_style = "month_day_year")
+```
+
+**GTSQL**
+```sql
+TABULATE date, time FROM exibble
+FORMAT date
+  RENAMING * => '{:time %B %-d, %Y}'
+```
+
+---
+
+## 17. Date + time + datetime in one table
+
+**gt**
+```{r}
+exibble |>
+  dplyr::select(date, time, datetime) |>
+  dplyr::slice(1:4) |>
+  gt() |>
+  fmt_date(columns = date, date_style = "day_month_year") |>
+  fmt_time(columns = time, time_style = "h_m_p") |>
+  fmt_datetime(
+    columns = datetime,
+    format = "EEEE, MMMM d, y 'at' h:mm a"
+  )
+```
+
+**GTSQL**
+```sql
+SELECT date, time, datetime FROM exibble LIMIT 4
+TABULATE date, time, datetime
+FORMAT date
+  RENAMING * => '{:time %-d %B %Y}'
+FORMAT time
+  RENAMING * => '{:time %-I:%M %p}'
+FORMAT datetime
+  RENAMING * => '{:time %A, %B %-d, %Y at %-I:%M %p}'
+```
+
+---
+
+## 18. Replace missing values
+
+**gt**
+```{r}
+exibble |>
+  dplyr::select(num, char, currency) |>
+  gt() |>
+  sub_missing(columns = num,      missing_text = "N/A") |>
+  sub_missing(columns = char,     missing_text = "(none)") |>
+  sub_missing(columns = currency, missing_text = "---")
+```
+
+**GTSQL**
+```sql
+TABULATE num, char, currency FROM exibble
+FORMAT num
+  RENAMING null => 'N/A'
+FORMAT char
+  RENAMING null => '(none)'
+FORMAT currency
+  RENAMING null => '---'
+```
+
+---
+
+## 19. Replace zero values
+
+**gt**
+```{r}
+dplyr::tibble(
+  product  = c("Widget A", "Widget B", "Widget C"),
+  in_stock = c(150, 0, 75),
+  on_order = c(0, 200, 0)
+) |>
+  gt() |>
+  fmt_integer() |>
+  sub_zero(columns = in_stock, zero_text = "Out of stock") |>
+  sub_zero(columns = on_order, zero_text = "-")
+```
+
+**GTSQL**
+```sql
+TABULATE product, in_stock, on_order FROM inventory
+FORMAT in_stock, on_order
+  RENAMING * => '{:num ,d}'
+FORMAT in_stock
+  RENAMING 0 => 'Out of stock'
+FORMAT on_order
+  RENAMING 0 => '-'
+```
+
+---
+
+## 20. Direct value mapping (text_case_match)
+
+**gt**
+```{r}
+dplyr::tibble(
+  feature   = c("API", "Dashboard", "Reports", "Settings"),
+  available = c("Y", "N", "Y", "P")
+) |>
+  gt() |>
+  text_case_match(
+    "Y" ~ "✓ Yes",
+    "N" ~ "✗ No",
+    "P" ~ "◐ Partial",
+    .locations = cells_body(columns = available)
+  )
+```
+
+**GTSQL**
+```sql
+TABULATE feature, available FROM features
+FORMAT available
+  RENAMING 'Y' => '✓ Yes',
+           'N' => '✗ No',
+           'P' => '◐ Partial'
+```
+
+---
+
+## 21. Per-column locale (French dates)
+
+**gt**
+```{r}
+exibble |>
+  dplyr::select(date) |>
+  gt() |>
+  fmt_datetime(columns = date, format = "EEEE d MMMM y", locale = "fr")
+```
+
+**GTSQL**
+```sql
+TABULATE date FROM exibble
+FORMAT date
+  SETTING locale => 'fr'
+  RENAMING * => '{:time %A %-d %B %Y}'
+```
+
+---
+
+## 22. Continuous color scale with explicit domain
+
+**gt**
+```{r}
+sp500 |>
+  dplyr::filter(date >= "2015-01-01" & date <= "2015-01-15") |>
+  dplyr::select(date, open, high, low, close) |>
+  gt() |>
+  fmt_currency(columns = c(open, high, low, close), decimals = 2) |>
+  data_color(
+    columns = c(open, high, low, close),
+    palette = "RdYlGn",
+    domain  = c(1990, 2090)
+  )
+```
+
+**GTSQL**
+```sql
+SELECT date, open, high, low, close
+FROM sp500
+WHERE date BETWEEN '2015-01-01' AND '2015-01-15'
+
+TABULATE date, open, high, low, close
+FORMAT open, high, low, close
+  RENAMING * => '${:num ,.2f}'
+SCALE background FROM (1990, 2090) TO RdYlGn
+  SETTING target => (open, high, low, close)
+```
+
+---
+
+## 23. Color scale with auto-inferred domain
+
+**gt**
+```{r}
+towny |>
+  dplyr::select(name, population_2021) |>
+  dplyr::slice_max(population_2021, n = 8) |>
+  gt() |>
+  fmt_integer(columns = population_2021) |>
+  data_color(
+    columns = population_2021,
+    palette = c("#f7fbff", "#08306b")
+  )
+```
+
+**GTSQL**
+```sql
+SELECT name, population_2021
+FROM towny
+ORDER BY population_2021 DESC
+LIMIT 8
+
+TABULATE name, population_2021
+FORMAT population_2021
+  RENAMING * => '{:num ,d}'
+SCALE background TO ('#f7fbff', '#08306b')
+  SETTING target => population_2021
+```
+
+---
+
+## 24. Named viridis palette
+
+**gt**
+```{r}
+gtcars |>
+  dplyr::select(mfr, model, hp, mpg_c) |>
+  dplyr::slice_head(n = 12) |>
+  gt() |>
+  data_color(columns = hp, palette = "viridis")
+```
+
+**GTSQL**
+```sql
+SELECT mfr, model, hp, mpg_c FROM gtcars LIMIT 12
+TABULATE mfr, model, hp, mpg_c
+SCALE background TO viridis
+  SETTING target => hp
+```
+
+---
+
+## 25. Log-scaled color mapping
+
+**gt**
+```{r}
+world_data <- dplyr::tibble(
+  country        = c("Luxembourg", "United States", "Germany", "Japan",
+                     "China", "Brazil", "India", "Nigeria",
+                     "Ethiopia", "Burundi"),
+  population     = c(0.65e6, 331e6, 83e6, 125e6,
+                     1412e6, 214e6, 1408e6, 213e6,
+                     120e6, 12e6),
+  gdp_per_capita = c(125000, 76000, 52000, 34000,
+                     12700, 9700, 2500, 2100,
+                     1000, 250)
+)
+
+world_data |>
+  gt() |>
+  data_color(
+    columns = gdp_per_capita,
+    fn = function(x) {
+      scales::col_numeric(
+        palette = c("white", "darkgreen"),
+        domain  = log10(c(1, 100000))
+      )(log10(pmax(x, 1)))
+    }
+  )
+```
+
+**GTSQL**
+```sql
+TABULATE country, population, gdp_per_capita FROM world_data
+SCALE background FROM (0, 100000) TO ('white', 'darkgreen') VIA log10
+  SETTING target => gdp_per_capita
+```
+
+---
+
+## 26. Conditional cell highlight (single column)
+
+**gt**
+```{r}
+students <- dplyr::tibble(
+  name  = c("Alice", "Bob", "Carla", "Dan", "Eve", "Frank"),
+  score = c(92, 58, 74, 45, 88, 67),
+  grade = c("A", "F", "C", "F", "B", "D")
+)
+
+students |>
+  gt() |>
+  tab_style(
+    style    = list(cell_text(weight = "bold", color = "red")),
+    locations = cells_body(columns = score, rows = score < 60)
+  )
+```
+
+**GTSQL**
+```sql
+TABULATE name, score, grade FROM students
+HIGHLIGHT score
+  FILTER score < 60
+  SETTING face => 'bold', color => 'red'
+```
+
+---
+
+## 27. Multi-column conditional highlight
+
+**gt**
+```{r}
+sales <- dplyr::tibble(
+  region  = c("North", "South", "East", "West"),
+  revenue = c(120000, 98000, 145000, 132000),
+  units   = c(1200, 980, 1450, 1320),
+  margin  = c(0.18, 0.22, 0.15, 0.27)
+)
+
+sales |>
+  gt() |>
+  tab_style(
+    style     = cell_fill(color = "#fff3cd"),
+    locations = cells_body(
+      columns = c(revenue, units, margin),
+      rows    = region == "West"
+    )
+  )
+```
+
+**GTSQL**
+```sql
+TABULATE region, revenue, units, margin FROM sales
+HIGHLIGHT revenue, units, margin
+  FILTER region = 'West'
+  SETTING background => '#fff3cd'
+```
+
+---
+
+## 28. Up/down day stock highlight (two HIGHLIGHTs)
+
+**gt**
+```{r}
+sp500 |>
+  dplyr::filter(date >= "2015-12-01" & date <= "2015-12-15") |>
+  dplyr::select(date, open, close) |>
+  gt() |>
+  fmt_currency(columns = c(open, close)) |>
+  tab_style(
+    style     = list(cell_fill(color = "#90EE90"), cell_text(weight = "bold")),
+    locations = cells_body(rows = close > open)
+  ) |>
+  tab_style(
+    style     = list(cell_fill(color = "#FFB6C1"), cell_text(weight = "bold")),
+    locations = cells_body(rows = close < open)
+  )
+```
+
+**GTSQL**
+```sql
+SELECT date, open, close
+FROM sp500
+WHERE date BETWEEN '2015-12-01' AND '2015-12-15'
+
+TABULATE date, open, close
+FORMAT open, close
+  RENAMING * => '${:num ,.2f}'
+HIGHLIGHT date, open, close
+  FILTER close > open
+  SETTING background => '#90EE90', face => 'bold'
+HIGHLIGHT date, open, close
+  FILTER close < open
+  SETTING background => '#FFB6C1', face => 'bold'
+```
+
+---
+
+## 29. Summary rows: single sum
+
+**gt**
+```{r}
+quarterly_sales <- dplyr::tibble(
+  category = c("Hardware", "Hardware", "Software", "Software"),
+  product  = c("Widget", "Gadget", "Gizmo", "Doohickey"),
+  revenue  = c(45000, 62000, 38000, 51000),
+  units    = c(450, 620, 380, 510)
+)
+
+quarterly_sales |>
+  gt(groupname_col = "category") |>
+  summary_rows(
+    columns = c(revenue, units),
+    fns     = list("sum")
+  )
+```
+
+**GTSQL**
+```sql
+TABULATE product, revenue, units FROM quarterly_sales
+FACET revenue, units
+  SETTING aggregate => ('sum')
+```
+
+---
+
+## 30. Summary rows: min/max/mean with labels
+
+**gt**
+```{r}
+sp500 |>
+  dplyr::filter(date >= "2015-01-05" & date <= "2015-01-16") |>
+  dplyr::mutate(week = paste("Week of", format(lubridate::floor_date(date, "week"), "%b %d"))) |>
+  gt(rowname_col = "date", groupname_col = "week") |>
+  summary_rows(
+    columns = c(open, high, low, close),
+    fns     = list(Min = "min", Max = "max", Avg = "mean"),
+    fmt     = ~ fmt_number(., decimals = 2)
+  )
+```
+
+**GTSQL**
+```sql
+SELECT date, open, high, low, close
+FROM sp500
+WHERE date BETWEEN '2015-01-05' AND '2015-01-16'
+
+TABULATE date, open, high, low, close
+FORMAT STUB date
+FORMAT open, high, low, close
+  RENAMING * => '{:num ,.2f}'
+FACET open, high, low, close
+  SETTING aggregate => ('min', 'max', 'mean'),
+          label => ['Min', 'Max', 'Avg'],
+          side => 'bottom'
+```
+
+---
+
+## 31. Title-case transformation
+
+**gt**
+```{r}
+penguins |>
+  dplyr::select(species, island, body_mass) |>
+  gt() |>
+  text_transform(
+    locations = cells_body(columns = c(species, island)),
+    fn        = function(x) tools::toTitleCase(tolower(x))
+  )
+```
+
+**GTSQL**
+```sql
+TABULATE species, island, body_mass FROM penguins
+FORMAT species, island
+  RENAMING * => '{:Title}'
+```
+
+---
+
+## 32. Units in column labels
+
+**gt**
+```{r}
+towny |>
+  dplyr::select(name, land_area_km2, density_2021) |>
+  dplyr::slice_head(n = 5) |>
+  gt(rowname_col = "name") |>
+  fmt_number(columns = land_area_km2, decimals = 1) |>
+  fmt_integer(columns = density_2021) |>
+  cols_label(
+    land_area_km2 = "Land Area {{km^2}}",
+    density_2021  = "Density {{people/km^2}}"
+  )
+```
+
+**GTSQL**
+```sql
+SELECT name, land_area_km2, density_2021 FROM towny LIMIT 5
+TABULATE name, land_area_km2, density_2021
+FORMAT STUB name
+FORMAT land_area_km2
+  SETTING units => 'km^2'
+  RENAMING * => '{:num ,.1f}'
+FORMAT density_2021
+  SETTING units => 'people/km^2'
+  RENAMING * => '{:num ,d}'
+```
+
+---
+
+## 33. Forced-sign percent (growth rates)
+
+**gt**
+```{r}
+growth <- dplyr::tibble(
+  region      = c("North", "South", "East", "West", "Central"),
+  growth_rate = c(0.045, -0.021, 0.083, -0.067, 0.012)
+)
+
+growth |>
+  gt() |>
+  fmt_percent(columns = growth_rate, decimals = 1, force_sign = TRUE)
+```
+
+**GTSQL**
+```sql
+TABULATE region, growth_rate FROM growth
+FORMAT growth_rate
+  RENAMING * => '{:num +.1f}%'
+```
+
+---
+
+## 34. Comprehensive: sales report with header, spanner, formatting, scale, highlight, summary
+
+**gt**
+```{r}
+set.seed(42)
+sales_data <- tidyr::expand_grid(
+  year    = c(2023, 2024),
+  region  = c("North", "South", "East", "West"),
+  quarter = c("Q1", "Q2", "Q3", "Q4")
+) |>
+  dplyr::mutate(
+    revenue      = round(runif(dplyr::n(), 50, 200), 1),
+    units_sold   = sample(500:2500, dplyr::n(), replace = TRUE),
+    satisfaction = round(runif(dplyr::n(), 0.55, 0.95), 2)
+  )
+
+quarterly <- sales_data |>
+  dplyr::filter(year == 2024) |>
+  dplyr::group_by(region, quarter) |>
+  dplyr::summarize(
+    revenue      = sum(revenue),
+    units        = sum(units_sold),
+    satisfaction = mean(satisfaction),
+    .groups = "drop"
+  )
+
+quarterly |>
+  gt(rowname_col = "quarter", groupname_col = "region") |>
+  tab_header(
+    title    = "2024 Sales Performance",
+    subtitle = "By Region and Quarter"
+  ) |>
+  tab_spanner(label = "Financial", columns = c(revenue, units)) |>
+  fmt_currency(columns = revenue, decimals = 1) |>
+  fmt_integer(columns = units) |>
+  fmt_percent(columns = satisfaction, decimals = 1, scale_values = FALSE) |>
+  cols_label(
+    revenue      = "Revenue",
+    units        = "Units Sold",
+    satisfaction = "CSAT Score"
+  ) |>
+  summary_rows(
+    columns = c(revenue, units),
+    fns     = list(Total = "sum", Average = "mean")
+  ) |>
+  data_color(
+    columns = satisfaction,
+    palette = c("white", "green"),
+    domain  = c(0, 1)
+  ) |>
+  tab_style(
+    style     = list(cell_text(weight = "bold", color = "red")),
+    locations = cells_body(columns = satisfaction, rows = satisfaction < 0.7)
+  )
+```
+
+**GTSQL**
+```sql
+WITH quarterly AS (
+  SELECT region, quarter,
+         SUM(revenue) AS revenue,
+         SUM(units_sold) AS units,
+         AVG(satisfaction) AS satisfaction
+  FROM sales_data
+  WHERE year = 2024
+  GROUP BY region, quarter
+)
+
+TABULATE region, quarter, revenue, units, satisfaction FROM quarterly
+
+FORMAT STUB region
+FORMAT SPAN revenue, units AS financial
+
+FORMAT revenue
+  RENAMING * => '${:num ,.1f}'
+FORMAT units
+  RENAMING * => '{:num ,d}'
+FORMAT satisfaction
+  RENAMING * => '{:num .1f}%'
+
+FACET revenue, units
+  SETTING aggregate => ('sum', 'mean'),
+          label => ['Total', 'Average'],
+          side => 'bottom'
+
+SCALE background FROM (0, 1) TO ('white', 'green')
+  SETTING target => satisfaction
+
+HIGHLIGHT satisfaction
+  FILTER satisfaction < 0.7
+  SETTING face => 'bold', color => 'red'
+
+LABEL
+  title => '2024 Sales Performance',
+  subtitle => 'By Region and Quarter',
+  financial => 'Financial',
+  revenue => 'Revenue',
+  units => 'Units Sold',
+  satisfaction => 'CSAT Score'
+```
+
+---
+
+## Notes on omissions
+
+The following table types from the source book are intentionally **not** in the
+corpus because GTSQL cannot currently express them:
+
+- Tables relying on `groupname_col` row groups (e.g. pizzas grouped by `type`).
+- Multi-column stubs (`rowname_col = c("region", "category")`).
+- Tables with cell footnotes (`tab_footnote()`) or per-element styling of the
+  table footer beyond `caption`.
+- Tables that re-order rows via `row_order()` / `row_group_order()` after
+  creation — equivalent ordering must be done in the upstream `SELECT ... ORDER
+  BY`.
+- Tables using `tab_spanner_delim()` to derive spanners from delimited column
+  names — equivalent must be expressed via explicit `FORMAT SPAN` clauses.
+- Stub indentation (`tab_stub_indent()`).
+- Nanoplots (`cols_nanoplot()`).
+- `grand_summary_rows()` (only group-level `summary_rows()` maps to `FACET`).
+- `text_transform()` with arbitrary R functions; only literal value-to-string
+  mapping is supported via `RENAMING <value> => '<string>'`.
+- `from_column()` dynamic parameters (e.g. per-row currency code or decimal
+  precision pulled from another column).
+- Global theming via `tab_options()` / `opt_*()` helpers.
