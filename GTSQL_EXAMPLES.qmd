@@ -39,7 +39,8 @@ exibble |>
 
 **GTSQL**
 ```sql
-TABULATE * FROM exibble
+SELECT * FROM exibble
+TABULATE
 ```
 
 ---
@@ -57,7 +58,7 @@ gtcars |>
 **GTSQL**
 ```sql
 SELECT mfr, model, year, hp FROM gtcars LIMIT 6
-TABULATE mfr, model, year, hp
+TABULATE
 ```
 
 ---
@@ -76,7 +77,7 @@ gtcars |>
 **GTSQL**
 ```sql
 SELECT model, year, hp, trq FROM gtcars LIMIT 5
-TABULATE model, year, hp, trq
+TABULATE
 FORMAT STUB model AS model_head
 LABEL model_head => 'car'
 ```
@@ -100,7 +101,7 @@ gtcars |>
 **GTSQL**
 ```sql
 SELECT mfr, model, msrp FROM gtcars LIMIT 5
-TABULATE mfr, model, msrp
+TABULATE
 LABEL
   title => 'Data listing from gtcars',
   subtitle => 'gtcars is an R dataset'
@@ -136,9 +137,9 @@ FROM towny
 ORDER BY population_2021 DESC
 LIMIT 8
 
-TABULATE name, population_2021, density_2021
+TABULATE
 FORMAT population_2021, density_2021
-  RENAMING * => '{:num ,d}'
+  RENAMING * => '{:num %'d}'
 LABEL
   title => 'Ontario''s Largest Municipalities',
   subtitle => 'Population and density from the 2021 census',
@@ -169,7 +170,7 @@ gtcars |>
 SELECT year, model, bdy_style, hp, hp_rpm, trq, trq_rpm, mpg_c, mpg_h
 FROM gtcars LIMIT 8
 
-TABULATE year, model, bdy_style, hp, hp_rpm, trq, trq_rpm, mpg_c, mpg_h
+TABULATE
 FORMAT STUB model
 FORMAT SPAN hp, hp_rpm, trq, trq_rpm, mpg_c, mpg_h AS performance
 ```
@@ -253,7 +254,7 @@ gtcars |>
 **GTSQL**
 ```sql
 SELECT mfr, model, year, hp FROM gtcars LIMIT 6
-TABULATE mfr, model, year, hp
+TABULATE
 FORMAT mfr
   SETTING hide => true
 ```
@@ -279,7 +280,7 @@ gtcars |>
 **GTSQL**
 ```sql
 SELECT model, hp, msrp FROM gtcars LIMIT 5
-TABULATE model, hp, msrp
+TABULATE
 FORMAT model
   SETTING width => '180px'
 FORMAT hp
@@ -304,7 +305,7 @@ exibble |>
 ```sql
 TABULATE num, char FROM exibble
 FORMAT num
-  RENAMING * => '{:num .3f}'
+  RENAMING * => '{:num %.3f}'
 ```
 
 ---
@@ -323,7 +324,7 @@ exibble |>
 ```sql
 TABULATE num, char FROM exibble
 FORMAT num
-  RENAMING * => '{:num ,d}'
+  RENAMING * => '{:num %'d}'
 ```
 
 ---
@@ -343,12 +344,12 @@ gtcars |>
 **GTSQL**
 ```sql
 SELECT model, year, hp, msrp FROM gtcars LIMIT 8
-TABULATE model, year, hp, msrp
+TABULATE
 FORMAT STUB model
 FORMAT hp
-  RENAMING * => '{:num ,d}'
+  RENAMING * => '{:num %'d}'
 FORMAT msrp
-  RENAMING * => '${:num ,d}'
+  RENAMING * => '${:num %'d}'
 ```
 
 ---
@@ -380,9 +381,9 @@ FROM monthly m CROSS JOIN totals t
 TABULATE month, pizzas_sold, pct_of_annual
 FORMAT STUB month
 FORMAT pizzas_sold
-  RENAMING * => '{:num ,d}'
+  RENAMING * => '{:num %'d}'
 FORMAT pct_of_annual
-  RENAMING * => '{:num .1f}%'
+  RENAMING * => '{:num %.1f}%'
 ```
 
 ---
@@ -403,7 +404,7 @@ dplyr::tibble(
 ```sql
 TABULATE small, large FROM powers
 FORMAT small, large
-  RENAMING * => '{:num .2e}'
+  RENAMING * => '{:num %.2e}'
 ```
 
 ---
@@ -422,7 +423,7 @@ exibble |>
 ```sql
 TABULATE date, time FROM exibble
 FORMAT date
-  RENAMING * => '{:time %B %-d, %Y}'
+  RENAMING * => '{:time %B %d, %Y}'
 ```
 
 ---
@@ -446,13 +447,13 @@ exibble |>
 **GTSQL**
 ```sql
 SELECT date, time, datetime FROM exibble LIMIT 4
-TABULATE date, time, datetime
+TABULATE
 FORMAT date
-  RENAMING * => '{:time %-d %B %Y}'
+  RENAMING * => '{:time %d %B %Y}'
 FORMAT time
-  RENAMING * => '{:time %-I:%M %p}'
+  RENAMING * => '{:time %I:%M %p}'
 FORMAT datetime
-  RENAMING * => '{:time %A, %B %-d, %Y at %-I:%M %p}'
+  RENAMING * => '{:time %A, %B %d, %Y at %I:%M %p}'
 ```
 
 ---
@@ -501,7 +502,7 @@ dplyr::tibble(
 ```sql
 TABULATE product, in_stock, on_order FROM inventory
 FORMAT in_stock, on_order
-  RENAMING * => '{:num ,d}'
+  RENAMING * => '{:num %'d}'
 FORMAT in_stock
   RENAMING 0 => 'Out of stock'
 FORMAT on_order
@@ -553,7 +554,7 @@ exibble |>
 TABULATE date FROM exibble
 FORMAT date
   SETTING locale => 'fr'
-  RENAMING * => '{:time %A %-d %B %Y}'
+  RENAMING * => '{:time %A %d %B %Y}'
 ```
 
 ---
@@ -580,9 +581,9 @@ SELECT date, open, high, low, close
 FROM sp500
 WHERE date BETWEEN '2015-01-01' AND '2015-01-15'
 
-TABULATE date, open, high, low, close
+TABULATE
 FORMAT open, high, low, close
-  RENAMING * => '${:num ,.2f}'
+  RENAMING * => '${:num %'.2f}'
 SCALE background FROM (1990, 2090) TO RdYlGn
   SETTING target => (open, high, low, close)
 ```
@@ -611,9 +612,9 @@ FROM towny
 ORDER BY population_2021 DESC
 LIMIT 8
 
-TABULATE name, population_2021
+TABULATE
 FORMAT population_2021
-  RENAMING * => '{:num ,d}'
+  RENAMING * => '{:num %'d}'
 SCALE background TO ('#f7fbff', '#08306b')
   SETTING target => population_2021
 ```
@@ -634,7 +635,7 @@ gtcars |>
 **GTSQL**
 ```sql
 SELECT mfr, model, hp, mpg_c FROM gtcars LIMIT 12
-TABULATE mfr, model, hp, mpg_c
+TABULATE
 SCALE background TO viridis
   SETTING target => hp
 ```
@@ -764,9 +765,9 @@ SELECT date, open, close
 FROM sp500
 WHERE date BETWEEN '2015-12-01' AND '2015-12-15'
 
-TABULATE date, open, close
+TABULATE
 FORMAT open, close
-  RENAMING * => '${:num ,.2f}'
+  RENAMING * => '${:num %'.2f}'
 HIGHLIGHT date, open, close
   FILTER close > open
   SETTING background => '#90EE90', face => 'bold'
@@ -831,7 +832,7 @@ WHERE date BETWEEN '2015-01-05' AND '2015-01-16'
 TABULATE date, open, high, low, close
 FORMAT STUB date
 FORMAT open, high, low, close
-  RENAMING * => '{:num ,.2f}'
+  RENAMING * => '{:num %'.2f}'
 FACET week
   SETTING target => (open, high, low, close),
           aggregate => ('min', 'max', 'mean'),
@@ -847,6 +848,7 @@ FACET week
 ```{r}
 penguins |>
   dplyr::select(species, island, body_mass) |>
+  dplyr::slice_head(n = 6) |>
   gt() |>
   text_transform(
     locations = cells_body(columns = c(species, island)),
@@ -856,45 +858,15 @@ penguins |>
 
 **GTSQL**
 ```sql
-TABULATE species, island, body_mass FROM penguins
+SELECT species, island, body_mass FROM penguins LIMIT 6
+TABULATE
 FORMAT species, island
   RENAMING * => '{:Title}'
 ```
 
 ---
 
-## 32. Units in column labels
-
-**gt**
-```{r}
-towny |>
-  dplyr::select(name, land_area_km2, density_2021) |>
-  dplyr::slice_head(n = 5) |>
-  gt(rowname_col = "name") |>
-  fmt_number(columns = land_area_km2, decimals = 1) |>
-  fmt_integer(columns = density_2021) |>
-  cols_label(
-    land_area_km2 = "Land Area {{km^2}}",
-    density_2021  = "Density {{people/km^2}}"
-  )
-```
-
-**GTSQL**
-```sql
-SELECT name, land_area_km2, density_2021 FROM towny LIMIT 5
-TABULATE name, land_area_km2, density_2021
-FORMAT STUB name
-FORMAT land_area_km2
-  SETTING units => 'km^2'
-  RENAMING * => '{:num ,.1f}'
-FORMAT density_2021
-  SETTING units => 'people/km^2'
-  RENAMING * => '{:num ,d}'
-```
-
----
-
-## 33. Forced-sign percent (growth rates)
+## 32. Forced-sign percent (growth rates)
 
 **gt**
 ```{r}
@@ -912,12 +884,12 @@ growth |>
 ```sql
 TABULATE region, growth_rate FROM growth
 FORMAT growth_rate
-  RENAMING * => '{:num +.1f}%'
+  RENAMING * => '{:num %+.1f}%'
 ```
 
 ---
 
-## 34. Comprehensive: sales report with header, spanner, formatting, scale, highlight, summary
+## 33. Comprehensive: sales report with header, spanner, formatting, scale, highlight, summary
 
 **gt**
 ```{r}
@@ -991,11 +963,11 @@ FORMAT STUB quarter
 FORMAT SPAN revenue, units AS financial
 
 FORMAT revenue
-  RENAMING * => '${:num ,.1f}'
+  RENAMING * => '${:num %'.1f}'
 FORMAT units
-  RENAMING * => '{:num ,d}'
+  RENAMING * => '{:num %'d}'
 FORMAT satisfaction
-  RENAMING * => '{:num .1f}%'
+  RENAMING * => '{:num %.1f}%'
 
 FACET region
   SETTING target => (revenue, units),
@@ -1027,6 +999,7 @@ The following table types from the source book are intentionally **not** in the
 corpus because GTSQL cannot currently express them:
 
 - Multi-column stubs (`rowname_col = c("region", "category")`).
+- `cols_units()` and the `{{ ... }}` units-in-label notation — GTSQL does not currently expose a units setting; embed the unit in the column label string instead.
 - Tables with cell footnotes (`tab_footnote()`) or per-element styling of the
   table footer beyond `caption`.
 - Tables that re-order rows via `row_order()` / `row_group_order()` after

@@ -50,7 +50,7 @@ FORMAT <SPAN|STUB> <column>, ... AS <id>
   RENAMING <value> => <string>, ...
 
 FORMAT SPAN span1, col3 AS combined
-  RENAMING * => '{:num ,d}'
+  RENAMING * => '{:num %'d}'
 
 -- Row grouping and/or summary aggregation (can appear *only once*)
 FACET [<group_col>, ...]
@@ -95,7 +95,7 @@ TABULATE <column>, ... FROM <data-source>
 
 **Behavior:**
 - Columns listed after `TABULATE` define which columns are shown in the table body
-- `*` selects all columns from the data source
+- `TABULATE` with no column list takes all columns from the preceding `SELECT`/CTE in source order
 - If a preceding `SELECT` provides data, `FROM` is optional
 - Column order in `TABULATE` determines display order
 - `AS` renames a column for display (maps to `cols_label()`)
@@ -104,7 +104,7 @@ TABULATE <column>, ... FROM <data-source>
 ```sql
 -- Minimal: show all columns from a query result
 SELECT * FROM penguins
-TABULATE *
+TABULATE
 
 -- Explicit columns, rename on the fly
 SELECT * FROM sales
@@ -114,7 +114,7 @@ TABULATE date, region, revenue AS 'Revenue ($)' FROM sales
 WITH monthly AS (
   SELECT month, SUM(revenue) as total FROM sales GROUP BY month
 )
-TABULATE * FROM monthly
+TABULATE FROM monthly
 ```
 
 **gt mapping:** `gt(data, ...)` with column selection/ordering handled by the engine.
@@ -149,7 +149,6 @@ The `SETTING` subclause on `FORMAT` controls display properties:
 - `width => 'string'` — column width, e.g., `'120px'`, `'20%'` (maps to `cols_width()`)
 - `align => 'string'` — alignment: `'left'`, `'center'`, `'right'`, `'auto'` (maps to `cols_align()`)
 - `hide => true/false` — hide column from display (maps to `cols_hide()`)
-- `units => 'string'` — units notation (maps to `cols_units()`)
 - `locale => 'string'` — locale for this column's formatting (e.g., `'fr'`, `'ja'`, `'pt-BR'`); controls number/date rendering in `RENAMING` (maps to `locale` param in `fmt_*()` calls for this column)
 
 **Example:**
@@ -200,15 +199,25 @@ FORMAT <column>, ...
 - `0` — applies to zero values (maps to `sub_zero()`)
 - A literal value — direct value-to-label mapping (maps to `text_transform()`)
 
-**Precedence:** When multiple LHS entries appear in the same `RENAMING` clause, specific values take priority over `*`. The evaluation order is: literal values > `null` > `0` > `*`. For example, `RENAMING * => '{:num ,d}', 30 => 'Thirty'` formats all values as integers but substitutes the literal text `'Thirty'` for the value `30`.
+**Precedence:** When multiple LHS entries appear in the same `RENAMING` clause, specific values take priority over `*`. The evaluation order is: literal values > `null` > `0` > `*`. For example, `RENAMING * => '{:num %'d}', 30 => 'Thirty'` formats all values as integers but substitutes the literal text `'Thirty'` for the value `30`.
+
+**Numeric formatter (`{:num ...}`)** — the text between `{:num ` and `}` is a literal `printf(3)` conversion specification (a `%` introducer, optional flags such as `'` for thousands separators, optional width and precision, and a conversion character such as `d`, `f`, or `e`). The interpolation engine passes the cell's numeric value through `printf` using that spec. `printf` conventions therefore apply verbatim:
+- `'` — locale-aware thousands separator (use this in place of a literal `,` flag)
+- `+` — force a leading sign
+- `0` — pad with leading zeros
+- `.N` — precision
+- `e` / `E` — scientific notation
+
+**Time formatter (`{:time ...}`)** — the text between `{:time ` and `}` is a literal `strftime(3)` format string and is rendered as-is (with locale applied per `SETTING locale`).
+
 
 **Right-hand side (RHS) — string interpolation with formatters (ggsql-native):**
 - `'{}'` — insert value as-is
 - `'{:Title}'` — title-case
 - `'{:UPPER}'` — upper-case
 - `'{:lower}'` — lower-case
-- `'{:num <printf>}'` — numeric formatting (printf syntax: `%0.2f`, `%+.1f`, `%,d`, `%e`, etc.)
-- `'{:time <strftime>}'` — date/time formatting (strftime syntax: `%B %Y`, `%H:%M`, etc.)
+- `'{:num <printf>}'` — numeric formatting; the body is a literal `printf` conversion spec, e.g., `%0.2f`, `%+.1f`, `%'d`, `%.2e`
+- `'{:time <strftime>}'` — date/time formatting; the body is a literal `strftime` format string, e.g., `%B %Y`, `%H:%M`
 
 Text surrounding `{}` is preserved as a prefix/suffix pattern.
 
@@ -216,23 +225,23 @@ Text surrounding `{}` is preserved as a prefix/suffix pattern.
 ```sql
 -- Format revenue as currency (comma-separated, 2 decimals, $ prefix)
 FORMAT revenue
-  RENAMING * => '${:num ,.2f}'
+  RENAMING * => '${:num %'.2f}'
 
 -- Format as percentage with 1 decimal
 FORMAT satisfaction
-  RENAMING * => '{:num .1f}%'
+  RENAMING * => '{:num %.1f}%'
 
 -- Format as integer with comma separators
 FORMAT units
-  RENAMING * => '{:num ,d}', 30 => 'Thirty'
+  RENAMING * => '{:num %'d}', 30 => 'Thirty'
 
 -- Numeric formatting with forced sign
 FORMAT growth_rate
-  RENAMING * => '{:num +.1f}%'
+  RENAMING * => '{:num %+.1f}%'
 
 -- Scientific notation
 FORMAT concentration
-  RENAMING * => '{:num .2e}'
+  RENAMING * => '{:num %.2e}'
 
 -- Date formatting
 FORMAT report_date
@@ -256,10 +265,10 @@ FORMAT species
 ```
 
 **gt mapping:**
-- `* => '${:num ,.2f}'` → `fmt_currency()` / `fmt_number()`
-- `* => '{:num .1f}%'` → `fmt_percent()`
-- `* => '{:num ,d}'` → `fmt_integer()`
-- `* => '{:num .2e}'` → `fmt_scientific()`
+- `* => '${:num %'.2f}'` → `fmt_currency()` / `fmt_number()`
+- `* => '{:num %.1f}%'` → `fmt_percent()`
+- `* => '{:num %'d}'` → `fmt_integer()`
+- `* => '{:num %.2e}'` → `fmt_scientific()`
 - `* => '{:time ...}'` → `fmt_date()`, `fmt_time()`, `fmt_datetime()`
 - `null => 'text'` → `sub_missing(missing_text = "text")`
 - `0 => 'text'` → `sub_zero()`
@@ -305,7 +314,7 @@ FORMAT SPAN financial, margin AS performance
 -- Format as currency, right-align, and set width
 FORMAT revenue
   SETTING width => '140px', align => 'right'
-  RENAMING * => '${:num ,.2f}'
+  RENAMING * => '${:num %'.2f}'
 ```
 
 **Example 4: Date formatting with column rename**
@@ -343,7 +352,7 @@ FORMAT score_raw
 -- Format this column using Brazilian Portuguese locale
 FORMAT preco
   SETTING locale => 'pt-BR'
-  RENAMING * => '{:num ,.2f}'
+  RENAMING * => '{:num %'.2f}'
 ```
 
 ---
@@ -562,7 +571,8 @@ LABEL
 
 **Example:**
 ```sql
-TABULATE * FROM sales
+SELECT * FROM sales
+TABULATE
 LABEL
   title => 'Quarterly Sales Report',
   subtitle => 'FY 2024 Q1-Q4',
@@ -600,11 +610,11 @@ TABULATE region, quarter, revenue, units, satisfaction FROM quarterly
 FORMAT STUB region
 FORMAT SPAN revenue, units AS financial
 FORMAT revenue
-  RENAMING * => '${:num ,.1f}'
+  RENAMING * => '${:num %'.1f}'
 FORMAT units
-  RENAMING * => '{:num ,d}'
+  RENAMING * => '{:num %'d}'
 FORMAT satisfaction
-  RENAMING * => '{:num .1f}%'
+  RENAMING * => '{:num %.1f}%'
 
 -- Summaries (table-wide totals; no row grouping)
 FACET
@@ -645,10 +655,10 @@ LABEL
 | `tab_spanner()` | `FORMAT SPAN <columns> AS <id>` | `FORMAT` |
 | `tab_stubhead()` | `FORMAT STUB <column> AS <id>` | `FORMAT` |
 | `fmt_number()` | `FORMAT ... RENAMING * => '{:num ...}'` | `FORMAT` |
-| `fmt_integer()` | `FORMAT ... RENAMING * => '{:num ,d}'` | `FORMAT` |
-| `fmt_percent()` | `FORMAT ... RENAMING * => '{:num .1f}%'` | `FORMAT` |
-| `fmt_currency()` | `FORMAT ... RENAMING * => '${:num ,.2f}'` | `FORMAT` |
-| `fmt_scientific()` | `FORMAT ... RENAMING * => '{:num .2e}'` | `FORMAT` |
+| `fmt_integer()` | `FORMAT ... RENAMING * => '{:num %'d}'` | `FORMAT` |
+| `fmt_percent()` | `FORMAT ... RENAMING * => '{:num %.1f}%'` | `FORMAT` |
+| `fmt_currency()` | `FORMAT ... RENAMING * => '${:num %'.2f}'` | `FORMAT` |
+| `fmt_scientific()` | `FORMAT ... RENAMING * => '{:num %.2e}'` | `FORMAT` |
 | `fmt_date()` | `FORMAT ... RENAMING * => '{:time ...}'` | `FORMAT` |
 | `fmt_time()` | `FORMAT ... RENAMING * => '{:time ...}'` | `FORMAT` |
 | `fmt_datetime()` | `FORMAT ... RENAMING * => '{:time ...}'` | `FORMAT` |
@@ -659,7 +669,6 @@ LABEL
 | `cols_width()` | `FORMAT ... SETTING width => '...'` | `FORMAT` |
 | `cols_align()` | `FORMAT ... SETTING align => '...'` | `FORMAT` |
 | `cols_hide()` | `FORMAT ... SETTING hide => true` | `FORMAT` |
-| `cols_units()` | `FORMAT ... SETTING units => '...'` | `FORMAT` |
 | `summary_rows()` | `FACET ... SETTING target => (...), aggregate => (...)` | `FACET` |
 | `data_color()` | `SCALE background/foreground FROM ... TO ...` | `SCALE` |
 | `tab_style()` (size) | `SCALE size FROM ... TO ...` | `SCALE` |
