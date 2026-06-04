@@ -2,7 +2,6 @@
 format: html
 html-table-processing: none
 ---
-
 ```{r}
 library(gt)
 library(tidyverse)
@@ -139,7 +138,7 @@ LIMIT 8
 
 TABULATE
 FORMAT population_2021, density_2021
-  RENAMING * => '{:num %'d}'
+  RENAMING * => '{:num %\'d}'
 LABEL
   title => 'Ontario''s Largest Municipalities',
   subtitle => 'Population and density from the 2021 census',
@@ -324,7 +323,7 @@ exibble |>
 ```sql
 TABULATE num, char FROM exibble
 FORMAT num
-  RENAMING * => '{:num %'d}'
+  RENAMING * => '{:num %\'d}'
 ```
 
 ---
@@ -347,9 +346,9 @@ SELECT model, year, hp, msrp FROM gtcars LIMIT 8
 TABULATE
 FORMAT STUB model
 FORMAT hp
-  RENAMING * => '{:num %'d}'
+  RENAMING * => '{:num %\'d}'
 FORMAT msrp
-  RENAMING * => '${:num %'d}'
+  RENAMING * => '${:num %\'d}'
 ```
 
 ---
@@ -381,7 +380,7 @@ FROM monthly m CROSS JOIN totals t
 TABULATE month, pizzas_sold, pct_of_annual
 FORMAT STUB month
 FORMAT pizzas_sold
-  RENAMING * => '{:num %'d}'
+  RENAMING * => '{:num %\'d}'
 FORMAT pct_of_annual
   RENAMING * => '{:num %.1f}%'
 ```
@@ -502,7 +501,7 @@ dplyr::tibble(
 ```sql
 TABULATE product, in_stock, on_order FROM inventory
 FORMAT in_stock, on_order
-  RENAMING * => '{:num %'d}'
+  RENAMING * => '{:num %\'d}'
 FORMAT in_stock
   RENAMING 0 => 'Out of stock'
 FORMAT on_order
@@ -583,7 +582,7 @@ WHERE date BETWEEN '2015-01-01' AND '2015-01-15'
 
 TABULATE
 FORMAT open, high, low, close
-  RENAMING * => '${:num %'.2f}'
+  RENAMING * => '${:num %\'.2f}'
 SCALE background FROM (1990, 2090) TO RdYlGn
   SETTING target => (open, high, low, close)
 ```
@@ -614,7 +613,7 @@ LIMIT 8
 
 TABULATE
 FORMAT population_2021
-  RENAMING * => '{:num %'d}'
+  RENAMING * => '{:num %\'d}'
 SCALE background TO ('#f7fbff', '#08306b')
   SETTING target => population_2021
 ```
@@ -767,7 +766,7 @@ WHERE date BETWEEN '2015-12-01' AND '2015-12-15'
 
 TABULATE
 FORMAT open, close
-  RENAMING * => '${:num %'.2f}'
+  RENAMING * => '${:num %\'.2f}'
 HIGHLIGHT date, open, close
   FILTER close > open
   SETTING background => '#90EE90', face => 'bold'
@@ -832,7 +831,7 @@ WHERE date BETWEEN '2015-01-05' AND '2015-01-16'
 TABULATE date, open, high, low, close
 FORMAT STUB date
 FORMAT open, high, low, close
-  RENAMING * => '{:num %'.2f}'
+  RENAMING * => '{:num %\'.2f}'
 FACET week
   SETTING target => (open, high, low, close),
           aggregate => ('min', 'max', 'mean'),
@@ -963,9 +962,9 @@ FORMAT STUB quarter
 FORMAT SPAN revenue, units AS financial
 
 FORMAT revenue
-  RENAMING * => '${:num %'.1f}'
+  RENAMING * => '${:num %\'.1f}'
 FORMAT units
-  RENAMING * => '{:num %'d}'
+  RENAMING * => '{:num %\'d}'
 FORMAT satisfaction
   RENAMING * => '{:num %.1f}%'
 

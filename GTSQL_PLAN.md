@@ -50,7 +50,7 @@ FORMAT <SPAN|STUB> <column>, ... AS <id>
   RENAMING <value> => <string>, ...
 
 FORMAT SPAN span1, col3 AS combined
-  RENAMING * => '{:num %'d}'
+  RENAMING * => '{:num %\'d}'
 
 -- Row grouping and/or summary aggregation (can appear *only once*)
 FACET [<group_col>, ...]
@@ -199,7 +199,7 @@ FORMAT <column>, ...
 - `0` — applies to zero values (maps to `sub_zero()`)
 - A literal value — direct value-to-label mapping (maps to `text_transform()`)
 
-**Precedence:** When multiple LHS entries appear in the same `RENAMING` clause, specific values take priority over `*`. The evaluation order is: literal values > `null` > `0` > `*`. For example, `RENAMING * => '{:num %'d}', 30 => 'Thirty'` formats all values as integers but substitutes the literal text `'Thirty'` for the value `30`.
+**Precedence:** When multiple LHS entries appear in the same `RENAMING` clause, specific values take priority over `*`. The evaluation order is: literal values > `null` > `0` > `*`. For example, `RENAMING * => '{:num %\'d}', 30 => 'Thirty'` formats all values as integers but substitutes the literal text `'Thirty'` for the value `30`.
 
 **Numeric formatter (`{:num ...}`)** — the text between `{:num ` and `}` is a literal `printf(3)` conversion specification (a `%` introducer, optional flags such as `'` for thousands separators, optional width and precision, and a conversion character such as `d`, `f`, or `e`). The interpolation engine passes the cell's numeric value through `printf` using that spec. `printf` conventions therefore apply verbatim:
 - `'` — locale-aware thousands separator (use this in place of a literal `,` flag)
@@ -216,7 +216,7 @@ FORMAT <column>, ...
 - `'{:Title}'` — title-case
 - `'{:UPPER}'` — upper-case
 - `'{:lower}'` — lower-case
-- `'{:num <printf>}'` — numeric formatting; the body is a literal `printf` conversion spec, e.g., `%0.2f`, `%+.1f`, `%'d`, `%.2e`
+- `'{:num <printf>}'` — numeric formatting; the body is a literal `printf` conversion spec, e.g., `%0.2f`, `%+.1f`, `%\'d`, `%.2e`
 - `'{:time <strftime>}'` — date/time formatting; the body is a literal `strftime` format string, e.g., `%B %Y`, `%H:%M`
 
 Text surrounding `{}` is preserved as a prefix/suffix pattern.
@@ -225,7 +225,7 @@ Text surrounding `{}` is preserved as a prefix/suffix pattern.
 ```sql
 -- Format revenue as currency (comma-separated, 2 decimals, $ prefix)
 FORMAT revenue
-  RENAMING * => '${:num %'.2f}'
+  RENAMING * => '${:num %\'.2f}'
 
 -- Format as percentage with 1 decimal
 FORMAT satisfaction
@@ -233,7 +233,7 @@ FORMAT satisfaction
 
 -- Format as integer with comma separators
 FORMAT units
-  RENAMING * => '{:num %'d}', 30 => 'Thirty'
+  RENAMING * => '{:num %\'d}', 30 => 'Thirty'
 
 -- Numeric formatting with forced sign
 FORMAT growth_rate
@@ -265,9 +265,9 @@ FORMAT species
 ```
 
 **gt mapping:**
-- `* => '${:num %'.2f}'` → `fmt_currency()` / `fmt_number()`
+- `* => '${:num %\'.2f}'` → `fmt_currency()` / `fmt_number()`
 - `* => '{:num %.1f}%'` → `fmt_percent()`
-- `* => '{:num %'d}'` → `fmt_integer()`
+- `* => '{:num %\'d}'` → `fmt_integer()`
 - `* => '{:num %.2e}'` → `fmt_scientific()`
 - `* => '{:time ...}'` → `fmt_date()`, `fmt_time()`, `fmt_datetime()`
 - `null => 'text'` → `sub_missing(missing_text = "text")`
@@ -314,7 +314,7 @@ FORMAT SPAN financial, margin AS performance
 -- Format as currency, right-align, and set width
 FORMAT revenue
   SETTING width => '140px', align => 'right'
-  RENAMING * => '${:num %'.2f}'
+  RENAMING * => '${:num %\'.2f}'
 ```
 
 **Example 4: Date formatting with column rename**
@@ -352,7 +352,7 @@ FORMAT score_raw
 -- Format this column using Brazilian Portuguese locale
 FORMAT preco
   SETTING locale => 'pt-BR'
-  RENAMING * => '{:num %'.2f}'
+  RENAMING * => '{:num %\'.2f}'
 ```
 
 ---
@@ -610,9 +610,9 @@ TABULATE region, quarter, revenue, units, satisfaction FROM quarterly
 FORMAT STUB region
 FORMAT SPAN revenue, units AS financial
 FORMAT revenue
-  RENAMING * => '${:num %'.1f}'
+  RENAMING * => '${:num %\'.1f}'
 FORMAT units
-  RENAMING * => '{:num %'d}'
+  RENAMING * => '{:num %\'d}'
 FORMAT satisfaction
   RENAMING * => '{:num %.1f}%'
 
@@ -655,9 +655,9 @@ LABEL
 | `tab_spanner()` | `FORMAT SPAN <columns> AS <id>` | `FORMAT` |
 | `tab_stubhead()` | `FORMAT STUB <column> AS <id>` | `FORMAT` |
 | `fmt_number()` | `FORMAT ... RENAMING * => '{:num ...}'` | `FORMAT` |
-| `fmt_integer()` | `FORMAT ... RENAMING * => '{:num %'d}'` | `FORMAT` |
+| `fmt_integer()` | `FORMAT ... RENAMING * => '{:num %\'d}'` | `FORMAT` |
 | `fmt_percent()` | `FORMAT ... RENAMING * => '{:num %.1f}%'` | `FORMAT` |
-| `fmt_currency()` | `FORMAT ... RENAMING * => '${:num %'.2f}'` | `FORMAT` |
+| `fmt_currency()` | `FORMAT ... RENAMING * => '${:num %\'.2f}'` | `FORMAT` |
 | `fmt_scientific()` | `FORMAT ... RENAMING * => '{:num %.2e}'` | `FORMAT` |
 | `fmt_date()` | `FORMAT ... RENAMING * => '{:time ...}'` | `FORMAT` |
 | `fmt_time()` | `FORMAT ... RENAMING * => '{:time ...}'` | `FORMAT` |
